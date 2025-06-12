@@ -3,19 +3,17 @@ from __future__ import annotations
 __all__ = []
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Sequence
+from typing import Any, Sequence
 
 import numpy as np
 from numpy.typing import NDArray
 
 from maite_datasets._base import BaseICDataset, DataLocation
-from maite_datasets._mixin import BaseDatasetNumpyMixin
-
-if TYPE_CHECKING:
-    from maite_datasets._protocols import Transform
+from maite_datasets._mixin._numpy import BaseDatasetNumpyMixin
+from maite_datasets._protocols import Transform
 
 
-class Ships(BaseICDataset[NDArray[Any]], BaseDatasetNumpyMixin):
+class Ships(BaseICDataset[NDArray[np.number[Any]]], BaseDatasetNumpyMixin):
     """
     A dataset that focuses on identifying ships from satellite images.
 
@@ -78,8 +76,8 @@ class Ships(BaseICDataset[NDArray[Any]], BaseDatasetNumpyMixin):
     def __init__(
         self,
         root: str | Path,
-        transforms: Transform[NDArray[Any]]
-        | Sequence[Transform[NDArray[Any]]]
+        transforms: Transform[NDArray[np.number[Any]]]
+        | Sequence[Transform[NDArray[np.number[Any]]]]
         | None = None,
         download: bool = False,
         verbose: bool = False,
@@ -129,7 +127,7 @@ class Ships(BaseICDataset[NDArray[Any]], BaseDatasetNumpyMixin):
         """Function to load in the file paths for the scene images"""
         return sorted(str(entry) for entry in (self.path / "scenes").glob("*.png"))
 
-    def get_scene(self, index: int) -> NDArray[np.uintp]:
+    def get_scene(self, index: int) -> NDArray[np.number[Any]]:
         """
         Get the desired satellite image (scene) by passing in the index of the desired file.
 
@@ -140,7 +138,7 @@ class Ships(BaseICDataset[NDArray[Any]], BaseDatasetNumpyMixin):
 
         Returns
         -------
-        NDArray[np.uintp]
+        NDArray[np.number]
             Scene image
 
         Note

@@ -5,25 +5,23 @@ __all__ = []
 import os
 import shutil
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Sequence, TypeVar
+from typing import Any, Literal, Sequence, TypeVar
 
+import numpy as np
 from defusedxml.ElementTree import parse
 from numpy.typing import NDArray
 
-from ._base import (
+from maite_datasets._base import (
     BaseDataset,
     BaseODDataset,
-    BaseSegDataset,
     DataLocation,
     _ensure_exists,
     _TArray,
     _TTarget,
 )
-from maite_datasets._mixin import BaseDatasetNumpyMixin
-from maite_datasets._types import ObjectDetectionTarget, SegmentationTarget
-
-if TYPE_CHECKING:
-    from maite_datasets._protocols import Transform
+from maite_datasets._mixin._numpy import BaseDatasetNumpyMixin
+from maite_datasets._protocols import Transform
+from maite_datasets._types import ObjectDetectionTarget
 
 VOCClassStringMap = Literal[
     "aeroplane",
@@ -456,8 +454,10 @@ class BaseVOCDataset(BaseDataset[_TArray, _TTarget, list[str], str]):
 
 
 class VOCDetection(
-    BaseVOCDataset[NDArray[Any], ObjectDetectionTarget[NDArray[Any]]],
-    BaseODDataset[NDArray[Any], list[str], str],
+    BaseVOCDataset[
+        NDArray[np.number[Any]], ObjectDetectionTarget[NDArray[np.number[Any]]]
+    ],
+    BaseODDataset[NDArray[np.number[Any]], list[str], str],
     BaseDatasetNumpyMixin,
 ):
     """
@@ -508,66 +508,3 @@ class VOCDetection(
     ----
     Data License: `Flickr Terms of Use <http://www.flickr.com/terms.gne?legacy=1>`_
     """
-
-
-class VOCSegmentation(
-    BaseVOCDataset[NDArray[Any], SegmentationTarget[NDArray[Any]]],
-    BaseSegDataset[NDArray[Any]],
-    BaseDatasetNumpyMixin,
-):
-    """
-    `Pascal VOC <http://host.robots.ox.ac.uk/pascal/VOC/>`_ Segmentation Dataset.
-
-    Parameters
-    ----------
-    root : str or pathlib.Path
-        Root directory of dataset where the ``vocdataset`` folder exists.
-    image_set : "train", "val", "test", or "base", default "train"
-        If "test", then dataset year must be "2007".
-        If "base", then the combined dataset of "train" and "val" is returned.
-    year : "2007", "2008", "2009", "2010", "2011" or "2012", default "2012"
-        The dataset year.
-    transforms : Transform, Sequence[Transform] or None, default None
-        Transform(s) to apply to the data.
-    download : bool, default False
-        If True, downloads the dataset from the internet and puts it in root directory.
-        Class checks to see if data is already downloaded to ensure it does not create a duplicate download.
-    verbose : bool, default False
-        If True, outputs print statements.
-
-    Attributes
-    ----------
-    path : pathlib.Path
-        Location of the folder containing the data.
-    year : "2007", "2008", "2009", "2010", "2011" or "2012"
-        The selected dataset year.
-    image_set : "train", "val", "test" or "base"
-        The selected image set from the dataset.
-    index2label : dict[int, str]
-        Dictionary which translates from class integers to the associated class strings.
-    label2index : dict[str, int]
-        Dictionary which translates from class strings to the associated class integers.
-    metadata : DatasetMetadata
-        Typed dictionary containing dataset metadata, such as `id` which returns the dataset class name.
-    transforms : Sequence[Transform]
-        The transforms to be applied to the data.
-    size : int
-        The size of the dataset.
-
-    Note
-    ----
-    Data License: `Flickr Terms of Use <http://www.flickr.com/terms.gne?legacy=1>`_
-    """
-
-    def _load_data(self) -> tuple[list[str], list[str], dict[str, list[Any]]]:
-        """Overload base load data to split out masks for segmentation."""
-        # Exception - test sets
-        year_set_bool = (self.image_set == "test" or self.image_set == "base") and (
-            self.year == "2012" or self.year == "2007"
-        )
-        if year_set_bool:
-            filepaths, targets, datum_metadata = self._load_data_exception()
-        else:
-            filepaths, targets, datum_metadata = self._load_try_and_update()
-        self._masks = datum_metadata.pop("mask_path")
-        return filepaths, targets, datum_metadata

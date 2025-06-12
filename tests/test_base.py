@@ -3,9 +3,8 @@ import hashlib
 import pytest
 
 from maite_datasets._base import DataLocation
-from maite_datasets._mnist import MNIST
-from maite_datasets._types import SegmentationTarget
-from maite_datasets._voc import VOCSegmentation
+from maite_datasets.image_classification._mnist import MNIST
+from maite_datasets.object_detection._voc import VOCDetection
 
 TEMP_MD5 = "d149274109b50d5147c09d6fc7e80c71"
 TEMP_SHA256 = "2b749913055289cb3a5c602a17196b5437dc59bba50e986ea449012a303f7201"
@@ -126,47 +125,30 @@ class TestBaseVOCDataset:
         ]
         return resources
 
-    def test_seg_dataset(self, voc_fake_test, monkeypatch):
-        "Test to make sure the BaseSegDataset has all the required parts"
-        monkeypatch.setattr(
-            VOCSegmentation, "_resources", self.mock_resources(voc_fake_test)
-        )
-        dataset = VOCSegmentation(root=voc_fake_test)
-        if isinstance(dataset, VOCSegmentation):
-            assert dataset._resources is not None
-            assert dataset.index2label != {}
-            assert dataset.label2index != {}
-            assert "id" in dataset.metadata
-            assert len(dataset) == 3
-            img, target, datum_meta = dataset[1]
-            assert img.shape == (3, 10, 10)
-            assert isinstance(target, SegmentationTarget)
-            assert "pose" in datum_meta
-
     def test_voc_wrong_year(self, voc_fake):
         """Test ask for test set with wrong year"""
         err_msg = (
             "The only test sets available are for the years 2007 and 2012, not 2010."
         )
         with pytest.raises(ValueError) as e:
-            VOCSegmentation(root=voc_fake, image_set="test", year="2010")
+            VOCDetection(root=voc_fake, image_set="test", year="2010")
         assert err_msg in str(e.value)
 
     def test_voc_2012_test(self, voc_fake_test, monkeypatch):
         """Test correctly ask for test set"""
         monkeypatch.setattr(
-            VOCSegmentation, "_resources", self.mock_resources(voc_fake_test)
+            VOCDetection, "_resources", self.mock_resources(voc_fake_test)
         )
-        dataset = VOCSegmentation(root=voc_fake_test, image_set="test", year="2012")
+        dataset = VOCDetection(root=voc_fake_test, image_set="test", year="2012")
         assert dataset.path.stem == "VOC2012"
         assert (dataset.path / "ImageSets" / "Main" / "test.txt").exists()
 
     def test_voc_base(self, voc_fake_test, monkeypatch):
         """Test asking for base set with a test set"""
         monkeypatch.setattr(
-            VOCSegmentation, "_resources", self.mock_resources(voc_fake_test)
+            VOCDetection, "_resources", self.mock_resources(voc_fake_test)
         )
-        dataset = VOCSegmentation(root=voc_fake_test, image_set="base", year="2012")
+        dataset = VOCDetection(root=voc_fake_test, image_set="base", year="2012")
         assert dataset.path.stem == "VOC2012"
         assert (dataset.path / "ImageSets" / "Main" / "test.txt").exists()
         assert (dataset.path / "ImageSets" / "Main" / "trainval.txt").exists()

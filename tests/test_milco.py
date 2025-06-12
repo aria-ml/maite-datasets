@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 # Import the MILCO class
-from maite_datasets._milco import MILCO
+from maite_datasets.object_detection._milco import MILCO
 
 # Extract the _read_annotations method
 read_annotations_func = MILCO._read_annotations

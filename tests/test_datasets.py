@@ -3,15 +3,15 @@ import hashlib
 import numpy as np
 import pytest
 
-from maite_datasets._antiuav import AntiUAVDetection
 from maite_datasets._base import DataLocation
-from maite_datasets._cifar10 import CIFAR10
-from maite_datasets._milco import MILCO
-from maite_datasets._mnist import MNIST
-from maite_datasets._seadrone import SeaDrone
-from maite_datasets._ships import Ships
 from maite_datasets._types import ObjectDetectionTarget
-from maite_datasets._voc import VOCDetection
+from maite_datasets.image_classification._cifar10 import CIFAR10
+from maite_datasets.image_classification._mnist import MNIST
+from maite_datasets.image_classification._ships import Ships
+from maite_datasets.object_detection._antiuav import AntiUAVDetection
+from maite_datasets.object_detection._milco import MILCO
+from maite_datasets.object_detection._seadrone import SeaDrone
+from maite_datasets.object_detection._voc import VOCDetection
 
 
 def get_tmp_hash(fpath, chunk_size=65535):

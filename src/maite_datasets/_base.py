@@ -9,7 +9,6 @@ from typing import Any, Generic, Iterator, Literal, NamedTuple, Sequence, TypeVa
 import numpy as np
 
 from maite_datasets._fileio import _ensure_exists
-from maite_datasets._mixin import BaseDatasetMixin
 from maite_datasets._protocols import Array, Transform
 from maite_datasets._types import (
     AnnotatedDataset,
@@ -18,8 +17,6 @@ from maite_datasets._types import (
     ImageClassificationDataset,
     ObjectDetectionDataset,
     ObjectDetectionTarget,
-    SegmentationDataset,
-    SegmentationTarget,
 )
 
 _TArray = TypeVar("_TArray", bound=Array)
@@ -43,6 +40,14 @@ class DataLocation(NamedTuple):
     filename: str
     md5: bool
     checksum: str
+
+
+class BaseDatasetMixin(Generic[_TArray]):
+    index2label: dict[int, str]
+
+    def _as_array(self, raw: list[Any]) -> _TArray: ...
+    def _one_hot_encode(self, value: int | list[int]) -> _TArray: ...
+    def _read_file(self, path: str) -> _TArray: ...
 
 
 class BaseDataset(
@@ -246,52 +251,4 @@ class BaseODDataset(
     @abstractmethod
     def _read_annotations(
         self, annotation: _TAnnotation
-    ) -> tuple[list[list[float]], list[int], dict[str, Any]]: ...
-
-
-class BaseSegDataset(
-    BaseDataset[_TArray, SegmentationTarget[_TArray], list[str], str],
-    BaseDatasetMixin[_TArray],
-    SegmentationDataset[_TArray],
-):
-    """
-    Base class for segmentation datasets.
-    """
-
-    _masks: Sequence[str]
-
-    def __getitem__(
-        self, index: int
-    ) -> tuple[_TArray, SegmentationTarget[_TArray], DatumMetadata]:
-        """
-        Args
-        ----
-        index : int
-            Value of the desired data point
-
-        Returns
-        -------
-        tuple[TArray, SegmentationTarget[TArray], dict[str, Any]]
-            Image, target, datum_metadata - target.mask returns the ground truth mask
-        """
-        # Grab the labels from the annotations
-        _, labels, additional_metadata = self._read_annotations(self._targets[index])
-        # Grab the ground truth masks
-        mask = self._read_file(self._masks[index])
-        # Get the image
-        img = self._read_file(self._filepaths[index])
-        img = self._transform(img)
-
-        target = SegmentationTarget(
-            mask, self._as_array(labels), self._one_hot_encode(labels)
-        )
-
-        img_metadata = {key: val[index] for key, val in self._datum_metadata.items()}
-        img_metadata = img_metadata | additional_metadata
-
-        return img, target, _to_datum_metadata(index, img_metadata)
-
-    @abstractmethod
-    def _read_annotations(
-        self, annotation: str
     ) -> tuple[list[list[float]], list[int], dict[str, Any]]: ...

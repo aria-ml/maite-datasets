@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import torch
 
-from maite_datasets.torch._mixin import BaseDatasetTorchMixin
+from maite_datasets._mixin._torch import BaseDatasetTorchMixin
 
 
 class TestBaseTorchMixin:
@@ -23,7 +23,7 @@ class TestBaseTorchMixin:
             mock._one_hot_encode([0, 1]), torch.tensor([[1.0, 0.0], [0.0, 1.0]])
         )
 
-    @patch("maite_datasets.torch._mixin.Image")
+    @patch("maite_datasets._mixin._torch.Image")
     def test_read_file(self, mock_image):
         mock = self.MockDataset()
         mock_image.open.return_value = [[[0], [0]], [[0], [0]]]  # (2, 2, 1)

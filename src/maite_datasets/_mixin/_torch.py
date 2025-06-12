@@ -4,11 +4,11 @@ __all__ = []
 
 from typing import Any
 
-from PIL import Image
 import numpy as np
 import torch
+from PIL import Image
 
-from maite_datasets._mixin import BaseDatasetMixin
+from maite_datasets._base import BaseDatasetMixin
 
 
 class BaseDatasetTorchMixin(BaseDatasetMixin[torch.Tensor]):

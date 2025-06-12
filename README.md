@@ -18,22 +18,22 @@ pip install maite-datasets[tqdm]
 
 ## Available Datasets
 
-| Dataset  | Task           | Description                                                                    |
-|----------|----------------|--------------------------------------------------------------------------------|
-| AntiUAV  | Detection      | A UAV detection dataset in natural images with varying backgrounds.            |
-| CIFAR10  | Classification | [CIFAR10](https://www.cs.toronto.edu/~kriz/cifar.html) classification dataset. |
-| MILCO    | Detection      | A side-scan sonar dataset focused on mine-like object detection.               |
-| MNIST    | Classification | A dataset of hand-written digits.                                              |
-| Seadrone | Detection      | A UAV dataset focused on open water object detection.                          |
-| Ships    | Classification | A dataset that focuses on identifying ships from satellite images.             |
-| VOC      | Detection      | [Pascal VOC](http://host.robots.ox.ac.uk/pascal/VOC/) detection dataset.       |
+| Task           | Dataset          | Description                                                         |
+|----------------|------------------|---------------------------------------------------------------------|
+| Classification | CIFAR10          | [CIFAR10](https://www.cs.toronto.edu/~kriz/cifar.html) dataset.     |
+| Classification | MNIST            | A dataset of hand-written digits.                                   |
+| Classification | Ships            | A dataset that focuses on identifying ships from satellite images.  |
+| Detection      | AntiUAVDetection | A UAV detection dataset in natural images with varying backgrounds. |
+| Detection      | MILCO            | A side-scan sonar dataset focused on mine-like object detection.    |
+| Detection      | Seadrone         | A UAV dataset focused on open water object detection.               |
+| Detection      | VOCDetection     | [Pascal VOC](http://host.robots.ox.ac.uk/pascal/VOC/) dataset.      |
 
 ## Usage
 
 Here is an example of how to import MNIST for usage with your workflow.
 
 ```python
->>> from maite_datasets import MNIST
+>>> from maite_datasets.image_classification import MNIST
 
 >>> mnist = MNIST(root="data", download=True)
 >>> print(mnist)
@@ -43,7 +43,7 @@ MNIST Dataset
     Transforms: []
     Image_set: train
     Metadata: {'id': 'MNIST_train', 'index2label': {0: 'zero', 1: 'one', 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six', 7: 'seven', 8: 'eight', 9: 'nine'}, 'split': 'train'}
-    Path: /home/aweng/maite-datasets/data/mnist
+    Path: /home/user/maite-datasets/data/mnist
     Size: 60000
 
 >>> print("tuple("+", ".join([str(type(t)) for t in mnist[0]])+")")
@@ -52,7 +52,7 @@ tuple(<class 'numpy.ndarray'>, <class 'numpy.ndarray'>, <class 'dict'>)
 
 ## Additional Information
 
-Fore more information on the MAITE protocol, check out their [documentation](https://mit-ll-ai-technology.github.io/maite/).
+For more information on the MAITE protocol, check out their [documentation](https://mit-ll-ai-technology.github.io/maite/).
 
 ## Acknowledgement
 

@@ -52,15 +52,3 @@ class ObjectDetectionTarget(Generic[_TArray]):
 class ObjectDetectionDataset(
     AnnotatedDataset[tuple[_TArray, ObjectDetectionTarget[_TArray], DatumMetadata]]
 ): ...
-
-
-@dataclass
-class SegmentationTarget(Generic[_TArray]):
-    mask: _TArray
-    labels: _TArray
-    scores: _TArray
-
-
-class SegmentationDataset(
-    AnnotatedDataset[tuple[_TArray, SegmentationTarget[_TArray], DatumMetadata]]
-): ...

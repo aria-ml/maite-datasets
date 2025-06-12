@@ -6,8 +6,8 @@ from torch import Tensor
 
 from maite_datasets._base import BaseODDataset
 from maite_datasets._types import ObjectDetectionTarget
-from maite_datasets._voc import BaseVOCDataset
-from maite_datasets.torch._mixin import BaseDatasetTorchMixin
+from maite_datasets._mixin._torch import BaseDatasetTorchMixin
+from maite_datasets.object_detection._voc import BaseVOCDataset
 
 
 class VOCDetectionTorch(

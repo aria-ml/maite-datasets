@@ -5,16 +5,17 @@ __all__ = []
 from pathlib import Path
 from typing import Any, Literal, Sequence
 
+import numpy as np
 from defusedxml.ElementTree import parse
 from numpy.typing import NDArray
 
 from maite_datasets._base import BaseODDataset, DataLocation
-from maite_datasets._mixin import BaseDatasetNumpyMixin
+from maite_datasets._mixin._numpy import BaseDatasetNumpyMixin
 from maite_datasets._protocols import Transform
 
 
 class AntiUAVDetection(
-    BaseODDataset[NDArray[Any], list[str], str], BaseDatasetNumpyMixin
+    BaseODDataset[NDArray[np.number[Any]], list[str], str], BaseDatasetNumpyMixin
 ):
     """
     A UAV detection dataset focused on detecting UAVs in natural images against large variation in backgrounds.
@@ -102,8 +103,8 @@ class AntiUAVDetection(
         self,
         root: str | Path,
         image_set: Literal["train", "val", "test", "base"] = "train",
-        transforms: Transform[NDArray[Any]]
-        | Sequence[Transform[NDArray[Any]]]
+        transforms: Transform[NDArray[np.number[Any]]]
+        | Sequence[Transform[NDArray[np.number[Any]]]]
         | None = None,
         download: bool = False,
         verbose: bool = False,

@@ -9,7 +9,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from maite_datasets._base import BaseICDataset, DataLocation
-from maite_datasets._mixin import BaseDatasetNumpyMixin
+from maite_datasets._mixin._numpy import BaseDatasetNumpyMixin
 from maite_datasets._protocols import Transform
 
 CIFARClassStringMap = Literal[
@@ -29,7 +29,7 @@ TCIFARClassMap = TypeVar(
 )
 
 
-class CIFAR10(BaseICDataset[NDArray[Any]], BaseDatasetNumpyMixin):
+class CIFAR10(BaseICDataset[NDArray[np.number[Any]]], BaseDatasetNumpyMixin):
     """
     `CIFAR10 <https://www.cs.toronto.edu/~kriz/cifar.html>`_ Dataset as NumPy arrays.
 
@@ -91,8 +91,8 @@ class CIFAR10(BaseICDataset[NDArray[Any]], BaseDatasetNumpyMixin):
         self,
         root: str | Path,
         image_set: Literal["train", "test", "base"] = "train",
-        transforms: Transform[NDArray[Any]]
-        | Sequence[Transform[NDArray[Any]]]
+        transforms: Transform[NDArray[np.number[Any]]]
+        | Sequence[Transform[NDArray[np.number[Any]]]]
         | None = None,
         download: bool = False,
         verbose: bool = False,
@@ -224,7 +224,7 @@ class CIFAR10(BaseICDataset[NDArray[Any]], BaseDatasetNumpyMixin):
                 images[i, 2] = blue_channel  # Blue channel
         return images, labels
 
-    def _read_file(self, path: str) -> NDArray[Any]:
+    def _read_file(self, path: str) -> NDArray[np.number[Any]]:
         """
         Function to grab the correct image from the loaded data.
         Overwrite of the base `_read_file` because data is an all or nothing load.

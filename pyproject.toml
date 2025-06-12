@@ -90,7 +90,6 @@ branch = true
 exclude_also = [
   "raise NotImplementedError",
   ": \\.\\.\\.",
-  "if TYPE_CHECKING:"
 ]
 include = ["*/src/maite_datasets/*"]
 fail_under = 90

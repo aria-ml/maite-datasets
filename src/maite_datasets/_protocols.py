@@ -89,22 +89,6 @@ class DatasetMetadata(TypedDict, total=False):
     index2label: NotRequired[ReadOnly[dict[int, str]]]
 
 
-class ModelMetadata(TypedDict, total=False):
-    """
-    Model metadata required for all `AnnotatedModel` classes.
-
-    Attributes
-    ----------
-    id : Required[str]
-        A unique identifier for the model
-    index2label : NotRequired[dict[int, str]]
-        A lookup table converting label value to class name
-    """
-
-    id: Required[ReadOnly[str]]
-    index2label: NotRequired[ReadOnly[dict[int, str]]]
-
-
 @runtime_checkable
 class Dataset(Generic[_T_co], Protocol):
     """
@@ -206,58 +190,6 @@ ObjectDetectionDataset: TypeAlias = AnnotatedDataset[ObjectDetectionDatum]
 """
 Type alias for an :class:`AnnotatedDataset` of :class:`ObjectDetectionDatum` elements.
 """
-
-
-# ========== SEGMENTATION DATASETS ==========
-
-
-@runtime_checkable
-class SegmentationTarget(Protocol):
-    """
-    Protocol for targets in a Segmentation dataset.
-
-    Attributes
-    ----------
-    mask : :class:`ArrayLike`
-    labels : :class:`ArrayLike`
-    scores : :class:`ArrayLike`
-    """
-
-    @property
-    def mask(self) -> ArrayLike: ...
-
-    @property
-    def labels(self) -> ArrayLike: ...
-
-    @property
-    def scores(self) -> ArrayLike: ...
-
-
-SegmentationDatum: TypeAlias = tuple[ArrayLike, SegmentationTarget, Mapping[str, Any]]
-"""
-Type alias for an image classification datum tuple.
-
-- :class:`ArrayLike` of shape (C, H, W) - Image data in channel, height, width format.
-- :class:`SegmentationTarget` - Segmentation target information for the image.
-- dict[str, Any] - Datum level metadata.
-"""
-
-SegmentationDataset: TypeAlias = AnnotatedDataset[SegmentationDatum]
-"""
-Type alias for an :class:`AnnotatedDataset` of :class:`SegmentationDatum` elements.
-"""
-
-# ========== MODEL ==========
-
-
-@runtime_checkable
-class AnnotatedModel(Protocol):
-    """
-    Protocol for an annotated model.
-    """
-
-    @property
-    def metadata(self) -> ModelMetadata: ...
 
 
 # ========== TRANSFORM ==========
