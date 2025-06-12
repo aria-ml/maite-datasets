@@ -1,0 +1,116 @@
+[project]
+name = "maite-datasets"
+description = "A collection of Image Classification and Object Detection task datasets conforming to the MAITE protocol."
+readme = "README.md"
+requires-python = ">=3.9"
+dynamic = ["version"]
+dependencies = [
+    "defusedxml>=0.7.1",
+    "numpy>=1.24.2",
+    "pillow>=10.3.0",
+    "requests>=2.32.3",
+    "typing-extensions>=4.12",
+]
+license = "MIT"
+authors = [
+  { name = "Andrew Weng", email = "andrew.weng@ariacoustics.com" },
+  { name = "Ryan Wood", email = "ryan.wood@ariacoustics.com" },
+  { name = "Shaun Jullens", email = "shaun.jullens@ariacoustics.com" },
+]
+classifiers = [
+   "Development Status :: 4 - Beta",
+   "Framework :: Pytest",
+   "Operating System :: OS Independent",
+   "License :: OSI Approved :: MIT License",
+   "Programming Language :: Python :: 3 :: Only",
+   "Programming Language :: Python :: 3.9",
+   "Programming Language :: Python :: 3.10",
+   "Programming Language :: Python :: 3.11",
+   "Programming Language :: Python :: 3.12",
+]
+
+[project.optional-dependencies]
+tqdm = [
+    "tqdm>=4.66",
+]
+
+[dependency-groups]
+base = [
+  "nox[uv]>=2025.5.1",
+  "torch>=2.2.0",
+  "uv>=0.7.8",
+]
+lint = [
+  "ruff>=0.11",
+  "codespell[toml]>=2.3",
+]
+test = [
+  { include-group = "base" },
+  "pytest>=8.3",
+  "pytest-cov>=6.1",
+  "coverage[toml]>=7.6",
+]
+type = [
+  { include-group = "base" },
+  "pyright[nodejs]>=1.1.400",
+]
+dev = [
+  { include-group = "base" },
+  { include-group = "lint" },
+  { include-group = "test" },
+  { include-group = "type" },
+]
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cpu" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = [
+  "--pythonwarnings=ignore::DeprecationWarning",
+]
+markers = [
+  "required: marks tests for required features",
+  "optional: marks tests for optional features",
+  "year: marks tests that need a specified dataset year",
+]
+
+[tool.coverage.run]
+source = ["src/maite_datasets"]
+branch = true
+
+[tool.coverage.report]
+exclude_also = [
+  "raise NotImplementedError",
+  ": \\.\\.\\.",
+  "if TYPE_CHECKING:"
+]
+include = ["*/src/maite_datasets/*"]
+fail_under = 90
+
+[tool.codespell]
+skip = './*env*,./output,uv.lock'
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/maite_datasets"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/LICENSE",
+    "/README.md",
+]
+
+[tool.hatch.version]
+source = "vcs"
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
