@@ -47,9 +47,7 @@ class TestHelperFunctionsBaseDataset:
     @pytest.mark.parametrize("verbose", [True, False])
     def test_ensure_exists_no_zip(self, capsys, dataset_no_zip, verbose):
         resource = ("fakeurl", "stuff.txt", True, TEMP_MD5)
-        _ensure_exists(
-            *resource, dataset_no_zip.parent, dataset_no_zip.parent, True, verbose
-        )
+        _ensure_exists(*resource, dataset_no_zip.parent, dataset_no_zip.parent, True, verbose)
         if verbose:
             captured = capsys.readouterr()
             assert captured.out == "stuff.txt already exists, skipping download.\n"
@@ -73,9 +71,7 @@ class TestHelperFunctionsBaseDataset:
         resource = ("fakeurl", "stuff.txt", True, TEMP_SHA256)
         err_msg = "File checksum mismatch. Remove current file and retry download."
         with pytest.raises(Exception) as e:
-            _ensure_exists(
-                *resource, dataset_no_zip.parent, dataset_no_zip.parent, False
-            )
+            _ensure_exists(*resource, dataset_no_zip.parent, dataset_no_zip.parent, False)
         assert err_msg in str(e.value)
 
     def test_ensure_exists_download_non_zip(self, capsys, mnist_folder):
@@ -121,9 +117,7 @@ class TestHelperFunctionsBaseDataset:
         resource = ("fakeurl", "something.zip", True, "")
         err_msg = "Data could not be loaded with the provided root directory,"
         with pytest.raises(FileNotFoundError) as e:
-            _ensure_exists(
-                *resource, dataset_no_zip.parent, dataset_no_zip.parent, False
-            )
+            _ensure_exists(*resource, dataset_no_zip.parent, dataset_no_zip.parent, False)
         assert err_msg in str(e.value)
 
     def test_download_dataset_http_error(self, monkeypatch):
@@ -142,9 +136,7 @@ class TestHelperFunctionsBaseDataset:
         with pytest.raises(ValueError):
             _download_dataset(url="http://mock/", file_path=Path("fake/path"))
 
-    @pytest.mark.parametrize(
-        "use_md5, hash_value", [(True, TEMP_MD5), (False, TEMP_SHA256)]
-    )
+    @pytest.mark.parametrize("use_md5, hash_value", [(True, TEMP_MD5), (False, TEMP_SHA256)])
     def test_validate_file(self, dataset_no_zip, use_md5, hash_value):
         assert _validate_file(dataset_no_zip, hash_value, use_md5)
 
@@ -170,7 +162,5 @@ class TestHelperFunctionsBaseDataset:
     def test_tarfile_error(self, dataset_single_zip):
         err_msg = f"{dataset_single_zip.name} is not a valid tar file"
         with pytest.raises(FileNotFoundError) as e:
-            _extract_tar_archive(
-                file_path=dataset_single_zip, extract_to=dataset_single_zip.parent
-            )
+            _extract_tar_archive(file_path=dataset_single_zip, extract_to=dataset_single_zip.parent)
         assert err_msg in str(e.value)

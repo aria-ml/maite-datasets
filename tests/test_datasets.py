@@ -217,9 +217,7 @@ class TestVOC:
 
     @pytest.mark.year(2011)
     def test_voc_2011(self, voc_fake, monkeypatch):
-        monkeypatch.setattr(
-            VOCDetection, "_resources", self.mock_resources(voc_fake, year=2011)
-        )
+        monkeypatch.setattr(VOCDetection, "_resources", self.mock_resources(voc_fake, year=2011))
         dataset = VOCDetection(root=voc_fake, year="2011")
         img, target, datum_meta = dataset[0]
         assert img.shape == (3, 10, 10)
@@ -228,9 +226,7 @@ class TestVOC:
 
     @pytest.mark.parametrize("first, second", [("train", "base"), ("test", "base")])
     def test_voc_half_downloaded_base(self, voc_fake_test, monkeypatch, first, second):
-        monkeypatch.setattr(
-            VOCDetection, "_resources", self.mock_resources(voc_fake_test, test=True)
-        )
+        monkeypatch.setattr(VOCDetection, "_resources", self.mock_resources(voc_fake_test, test=True))
         _ = VOCDetection(root=voc_fake_test, image_set=first)
         dataset = VOCDetection(root=voc_fake_test, image_set=second)
         img, target, datum_meta = dataset[0]
@@ -239,9 +235,7 @@ class TestVOC:
         assert "pose" in datum_meta
 
     def test_voc_half_downloaded_test(self, voc_fake_test, monkeypatch):
-        monkeypatch.setattr(
-            VOCDetection, "_resources", self.mock_resources(voc_fake_test, test=True)
-        )
+        monkeypatch.setattr(VOCDetection, "_resources", self.mock_resources(voc_fake_test, test=True))
         _ = VOCDetection(root=voc_fake_test, image_set="train")
         dataset = VOCDetection(root=voc_fake_test, image_set="test")
         img, target, datum_meta = dataset[0]

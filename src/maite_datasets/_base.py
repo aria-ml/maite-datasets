@@ -76,13 +76,9 @@ class BaseDataset(
         download: bool = False,
         verbose: bool = False,
     ) -> None:
-        self._root: Path = (
-            root.absolute() if isinstance(root, Path) else Path(root).absolute()
-        )
+        self._root: Path = root.absolute() if isinstance(root, Path) else Path(root).absolute()
         transforms = transforms if transforms is not None else []
-        self.transforms: Sequence[Transform[_TArray]] = (
-            transforms if isinstance(transforms, Sequence) else [transforms]
-        )
+        self.transforms: Sequence[Transform[_TArray]] = transforms if isinstance(transforms, Sequence) else [transforms]
         self.image_set = image_set
         self._verbose = verbose
 
@@ -109,11 +105,7 @@ class BaseDataset(
         nt = "\n    "
         title = f"{self.__class__.__name__} Dataset"
         sep = "-" * len(title)
-        attrs = [
-            f"{k.capitalize()}: {v}"
-            for k, v in self.__dict__.items()
-            if not k.startswith("_")
-        ]
+        attrs = [f"{k.capitalize()}: {v}" for k, v in self.__dict__.items() if not k.startswith("_")]
         return f"{title}\n{sep}{nt}{nt.join(attrs)}"
 
     @property
@@ -149,9 +141,7 @@ class BaseDataset(
             if self._verbose:
                 print("No download needed, loaded data successfully.")
         except FileNotFoundError:
-            _ensure_exists(
-                *self._resource, self.path, self._root, self._download, self._verbose
-            )
+            _ensure_exists(*self._resource, self.path, self._root, self._download, self._verbose)
             result = self._load_data_inner()
         return result
 
@@ -212,9 +202,7 @@ class BaseODDataset(
 
     _bboxes_per_size: bool = False
 
-    def __getitem__(
-        self, index: int
-    ) -> tuple[_TArray, ObjectDetectionTarget[_TArray], DatumMetadata]:
+    def __getitem__(self, index: int) -> tuple[_TArray, ObjectDetectionTarget[_TArray], DatumMetadata]:
         """
         Args
         ----
@@ -235,13 +223,9 @@ class BaseODDataset(
         img = self._transform(img)
         # Adjust labels if necessary
         if self._bboxes_per_size and boxes:
-            boxes = boxes * np.array(
-                [[img_size[1], img_size[2], img_size[1], img_size[2]]]
-            )
+            boxes = boxes * np.array([[img_size[1], img_size[2], img_size[1], img_size[2]]])
         # Create the Object Detection Target
-        target = ObjectDetectionTarget(
-            self._as_array(boxes), self._as_array(labels), self._one_hot_encode(labels)
-        )
+        target = ObjectDetectionTarget(self._as_array(boxes), self._as_array(labels), self._one_hot_encode(labels))
 
         img_metadata = {key: val[index] for key, val in self._datum_metadata.items()}
         img_metadata = img_metadata | additional_metadata
@@ -249,6 +233,4 @@ class BaseODDataset(
         return img, target, _to_datum_metadata(index, img_metadata)
 
     @abstractmethod
-    def _read_annotations(
-        self, annotation: _TAnnotation
-    ) -> tuple[list[list[float]], list[int], dict[str, Any]]: ...
+    def _read_annotations(self, annotation: _TAnnotation) -> tuple[list[list[float]], list[int], dict[str, Any]]: ...

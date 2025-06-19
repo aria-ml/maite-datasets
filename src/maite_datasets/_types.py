@@ -37,9 +37,7 @@ class AnnotatedDataset(Dataset[_TDatum]):
     def __len__(self) -> int: ...
 
 
-class ImageClassificationDataset(
-    AnnotatedDataset[tuple[_TArray, _TArray, DatumMetadata]]
-): ...
+class ImageClassificationDataset(AnnotatedDataset[tuple[_TArray, _TArray, DatumMetadata]]): ...
 
 
 @dataclass
@@ -49,6 +47,4 @@ class ObjectDetectionTarget(Generic[_TArray]):
     scores: _TArray
 
 
-class ObjectDetectionDataset(
-    AnnotatedDataset[tuple[_TArray, ObjectDetectionTarget[_TArray], DatumMetadata]]
-): ...
+class ObjectDetectionDataset(AnnotatedDataset[tuple[_TArray, ObjectDetectionTarget[_TArray], DatumMetadata]]): ...

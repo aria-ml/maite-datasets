@@ -76,9 +76,7 @@ class Ships(BaseICDataset[NDArray[np.number[Any]]], BaseDatasetNumpyMixin):
     def __init__(
         self,
         root: str | Path,
-        transforms: Transform[NDArray[np.number[Any]]]
-        | Sequence[Transform[NDArray[np.number[Any]]]]
-        | None = None,
+        transforms: Transform[NDArray[np.number[Any]]] | Sequence[Transform[NDArray[np.number[Any]]]] | None = None,
         download: bool = False,
         verbose: bool = False,
     ) -> None:

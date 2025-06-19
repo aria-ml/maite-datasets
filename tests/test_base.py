@@ -21,9 +21,7 @@ def get_tmp_hash(fpath, chunk_size=65535):
 @pytest.mark.optional
 class TestBaseDataset:
     @pytest.mark.parametrize("verbose", [True, False])
-    def test_get_resource(
-        self, capsys, dataset_nested_folder, mnist_npy, verbose, monkeypatch
-    ):
+    def test_get_resource(self, capsys, dataset_nested_folder, mnist_npy, verbose, monkeypatch):
         def mock_resources(dataset_nested_folder, mnist_npy):
             resources = [
                 DataLocation(
@@ -41,9 +39,7 @@ class TestBaseDataset:
             ]
             return resources
 
-        monkeypatch.setattr(
-            MNIST, "_resources", mock_resources(dataset_nested_folder, mnist_npy)
-        )
+        monkeypatch.setattr(MNIST, "_resources", mock_resources(dataset_nested_folder, mnist_npy))
         datasetA = MNIST(
             root=dataset_nested_folder.parent,
             download=False,
@@ -127,27 +123,21 @@ class TestBaseVOCDataset:
 
     def test_voc_wrong_year(self, voc_fake):
         """Test ask for test set with wrong year"""
-        err_msg = (
-            "The only test sets available are for the years 2007 and 2012, not 2010."
-        )
+        err_msg = "The only test sets available are for the years 2007 and 2012, not 2010."
         with pytest.raises(ValueError) as e:
             VOCDetection(root=voc_fake, image_set="test", year="2010")
         assert err_msg in str(e.value)
 
     def test_voc_2012_test(self, voc_fake_test, monkeypatch):
         """Test correctly ask for test set"""
-        monkeypatch.setattr(
-            VOCDetection, "_resources", self.mock_resources(voc_fake_test)
-        )
+        monkeypatch.setattr(VOCDetection, "_resources", self.mock_resources(voc_fake_test))
         dataset = VOCDetection(root=voc_fake_test, image_set="test", year="2012")
         assert dataset.path.stem == "VOC2012"
         assert (dataset.path / "ImageSets" / "Main" / "test.txt").exists()
 
     def test_voc_base(self, voc_fake_test, monkeypatch):
         """Test asking for base set with a test set"""
-        monkeypatch.setattr(
-            VOCDetection, "_resources", self.mock_resources(voc_fake_test)
-        )
+        monkeypatch.setattr(VOCDetection, "_resources", self.mock_resources(voc_fake_test))
         dataset = VOCDetection(root=voc_fake_test, image_set="base", year="2012")
         assert dataset.path.stem == "VOC2012"
         assert (dataset.path / "ImageSets" / "Main" / "test.txt").exists()

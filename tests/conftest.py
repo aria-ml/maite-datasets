@@ -129,13 +129,8 @@ def ship_fake(tmp_path_factory):
     ship_temp.mkdir(parents=True, exist_ok=True)
     scene_temp = temp / "ships" / "scenes"
     scene_temp.mkdir(parents=True, exist_ok=True)
-    labels = np.concatenate(
-        [np.ones(1000, dtype=np.uint8), np.zeros(3000, dtype=np.uint8)]
-    )
-    data = (
-        np.ones((4000, 10, 10, 3), dtype=np.uint8)
-        * labels[:, np.newaxis, np.newaxis, np.newaxis]
-    )
+    labels = np.concatenate([np.ones(1000, dtype=np.uint8), np.zeros(3000, dtype=np.uint8)])
+    data = np.ones((4000, 10, 10, 3), dtype=np.uint8) * labels[:, np.newaxis, np.newaxis, np.newaxis]
     for i in range(labels.size):
         image = Image.fromarray(data[i])
         image.save(ship_temp / f"{labels[i]}__abc__105_{i}.png")
@@ -185,9 +180,7 @@ def milco_fake(tmp_path_factory):
         image = Image.fromarray(data[i])
         image.save(a_temp / f"{i}_2015.jpg")
         with open(a_temp / f"{i}_2015.txt", mode="w") as f:
-            f.write(
-                f"{int(np.random.choice([0, 1]))} {300 / 1024} {753 / 1024} {56 / 1024} {43 / 1024}"
-            )
+            f.write(f"{int(np.random.choice([0, 1]))} {300 / 1024} {753 / 1024} {56 / 1024} {43 / 1024}")
     for i in range(2):
         image = Image.fromarray(data[i + 6])
         image.save(b_temp / f"{i}_2017.jpg")

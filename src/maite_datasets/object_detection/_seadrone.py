@@ -313,9 +313,7 @@ class SeaDrone(
         self,
         root: str | Path,
         image_set: Literal["train", "val", "test", "base"] = "train",
-        transforms: Transform[NDArray[np.number[Any]]]
-        | Sequence[Transform[NDArray[np.number[Any]]]]
-        | None = None,
+        transforms: Transform[NDArray[np.number[Any]]] | Sequence[Transform[NDArray[np.number[Any]]]] | None = None,
         download: bool = False,
         verbose: bool = False,
     ) -> None:
@@ -365,9 +363,7 @@ class SeaDrone(
 
     def _load_data(
         self,
-    ) -> tuple[
-        list[str], list[tuple[list[int], list[list[float]]]], dict[str, list[Any]]
-    ]:
+    ) -> tuple[list[str], list[tuple[list[int], list[list[float]]]], dict[str, list[Any]]]:
         image_sets: dict[str, list[int]] = {
             "train": list(range(20)),
             "val": list(range(20, 24)),
@@ -390,9 +386,7 @@ class SeaDrone(
 
         return filepaths, list(targets), datum_metadata
 
-    def _load_images(
-        self, data_folder: Path, file_data: dict[int, dict[str, Any]]
-    ) -> dict[int, dict[str, Any]]:
+    def _load_images(self, data_folder: Path, file_data: dict[int, dict[str, Any]]) -> dict[int, dict[str, Any]]:
         for entry in data_folder.iterdir():
             if entry.is_file() and entry.suffix == ".jpg":
                 if int(entry.stem) not in file_data:
@@ -441,14 +435,10 @@ class SeaDrone(
             current_file["storage"] = source.get("folder_name", "")
 
             # Handle non-standard file metadata
-            current_file["date_time"] = (
-                file_meta.get("date_time") or meta.get("date_time") or ""
-            )
+            current_file["date_time"] = file_meta.get("date_time") or meta.get("date_time") or ""
             if "frame" in file_meta:
                 frame = file_meta["frame"][:-4]
-                current_file["frame"] = (
-                    int(frame.split("_")[-1]) if "IMG_" in frame else int(frame[3:])
-                )
+                current_file["frame"] = int(frame.split("_")[-1]) if "IMG_" in frame else int(frame[3:])
             elif "frame_no" in source:
                 current_file["frame"] = source["frame_no"]
             else:
@@ -456,9 +446,7 @@ class SeaDrone(
 
             # Grab additional metadata if available
             for output_key, (possible_keys, default) in mappings.items():
-                current_file[output_key] = next(
-                    (meta.get(key) for key in possible_keys if key in meta), default
-                )
+                current_file[output_key] = next((meta.get(key) for key in possible_keys if key in meta), default)
 
         # Retrieve the label and bounding box
         for annotation in result["annotations"]:
@@ -482,9 +470,7 @@ class SeaDrone(
 
         return file_data
 
-    def _restructure_file_data(
-        self, file_data: dict[int, dict[str, Any]]
-    ) -> dict[str, list[Any]]:
+    def _restructure_file_data(self, file_data: dict[int, dict[str, Any]]) -> dict[str, list[Any]]:
         """Restructure file_data from dictionary of dictionaries to a dictionary of lists"""
         # Get the keys from the dictionary
         all_keys = set()
@@ -501,9 +487,7 @@ class SeaDrone(
         # Create the lists
         for file_id, file_dict in file_data.items():
             restructured_data["image_id"].append(file_id)
-            restructured_data["label_box"].append(
-                (file_dict.get("label", []), file_dict.get("box", []))
-            )
+            restructured_data["label_box"].append((file_dict.get("label", []), file_dict.get("box", [])))
             for key in all_keys:
                 restructured_data[key].append(file_dict.get(key, None))
 
@@ -528,12 +512,8 @@ class SeaDrone(
                 json_name = folder
                 if json_name == "test":
                     json_name += "_nogt"
-                annotation_file = (
-                    self.path / "annotations" / f"instances_{json_name}.json"
-                )
-                file_data = self._create_per_image_annotations(
-                    annotation_file, file_data
-                )
+                annotation_file = self.path / "annotations" / f"instances_{json_name}.json"
+                file_data = self._create_per_image_annotations(annotation_file, file_data)
 
         meta_data = self._restructure_file_data(file_data)
         data = meta_data.pop("data_path")

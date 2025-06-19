@@ -19,11 +19,7 @@ def prep(session: nox.Session) -> str:
     version = session.name
     pattern = re.compile(r".*(3.\d+)$")
     matches = pattern.match(version)
-    version = (
-        matches.groups()[0]
-        if matches is not None and len(matches.groups()) > 0
-        else PYTHON_VERSION
-    )
+    version = matches.groups()[0] if matches is not None and len(matches.groups()) > 0 else PYTHON_VERSION
     if version not in SUPPORTED_VERSIONS:
         raise ValueError(f"Specified python version {version} is not supported.")
     return version

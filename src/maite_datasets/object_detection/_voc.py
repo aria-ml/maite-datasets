@@ -45,9 +45,7 @@ VOCClassStringMap = Literal[
     "train",
     "tvmonitor",
 ]
-TVOCClassMap = TypeVar(
-    "TVOCClassMap", VOCClassStringMap, int, list[VOCClassStringMap], list[int]
-)
+TVOCClassMap = TypeVar("TVOCClassMap", VOCClassStringMap, int, list[VOCClassStringMap], list[int])
 
 
 class BaseVOCDataset(BaseDataset[_TArray, _TTarget, list[str], str]):
@@ -170,13 +168,9 @@ class BaseVOCDataset(BaseDataset[_TArray, _TTarget, list[str], str]):
             base if base.stem == f"VOC{self.year}" else None,
             base / f"VOC{self.year}" if base.stem == "VOCdevkit" else None,
             base / "VOCdevkit" / f"VOC{self.year}",
-            base / "TrainVal" / "VOCdevkit" / f"VOC{self.year}"
-            if self.year == "2011"
-            else None,
+            base / "TrainVal" / "VOCdevkit" / f"VOC{self.year}" if self.year == "2011" else None,
             dataset_dir / "VOCdevkit" / f"VOC{self.year}",
-            dataset_dir / "TrainVal" / "VOCdevkit" / f"VOC{self.year}"
-            if self.year == "2011"
-            else None,
+            dataset_dir / "TrainVal" / "VOCdevkit" / f"VOC{self.year}" if self.year == "2011" else None,
         ]
 
         # Filter out None values and check each path
@@ -269,9 +263,7 @@ class BaseVOCDataset(BaseDataset[_TArray, _TTarget, list[str], str]):
 
             for img_set in ["test", "base"]:
                 self.image_set = img_set
-                resource_filepaths, resource_targets, resource_metadata = (
-                    self._load_data_inner()
-                )
+                resource_filepaths, resource_targets, resource_metadata = self._load_data_inner()
                 filepaths.extend(resource_filepaths)
                 targets.extend(resource_targets)
                 metadata_list.append(resource_metadata)
@@ -288,14 +280,10 @@ class BaseVOCDataset(BaseDataset[_TArray, _TTarget, list[str], str]):
             self._resource = self._resources[resource_idx[1]]
 
             if train_exists and not test_exists:
-                _ensure_exists(
-                    *self._resource, tmp_path, self._root, self._download, self._verbose
-                )
+                _ensure_exists(*self._resource, tmp_path, self._root, self._download, self._verbose)
                 self._merge_voc_directories(tmp_path)
 
-            resource_filepaths, resource_targets, resource_metadata = (
-                self._load_try_and_update()
-            )
+            resource_filepaths, resource_targets, resource_metadata = self._load_try_and_update()
             filepaths.extend(resource_filepaths)
             targets.extend(resource_targets)
             datum_metadata.update(resource_metadata)
@@ -341,9 +329,7 @@ class BaseVOCDataset(BaseDataset[_TArray, _TTarget, list[str], str]):
             if self._verbose:
                 print("No download needed, loaded data successfully.")
         except FileNotFoundError:
-            _ensure_exists(
-                *self._resource, self.path, self._root, self._download, self._verbose
-            )
+            _ensure_exists(*self._resource, self.path, self._root, self._download, self._verbose)
             self._update_path()
             result = self._load_data_inner()
         return result
@@ -364,9 +350,7 @@ class BaseVOCDataset(BaseDataset[_TArray, _TTarget, list[str], str]):
     def _get_image_sets(self) -> dict[str, list[str]]:
         """Function to create the list of images in each image set"""
         image_folder = self.path / "JPEGImages"
-        image_set_list = (
-            ["train", "val", "trainval"] if self.image_set != "test" else ["test"]
-        )
+        image_set_list = ["train", "val", "trainval"] if self.image_set != "test" else ["test"]
         image_sets = {}
         for image_set in image_set_list:
             text_file = self.path / "ImageSets" / "Main" / (image_set + ".txt")
@@ -408,9 +392,7 @@ class BaseVOCDataset(BaseDataset[_TArray, _TTarget, list[str], str]):
 
         return data, annotations, file_meta
 
-    def _read_annotations(
-        self, annotation: str
-    ) -> tuple[list[list[float]], list[int], dict[str, Any]]:
+    def _read_annotations(self, annotation: str) -> tuple[list[list[float]], list[int], dict[str, Any]]:
         boxes: list[list[float]] = []
         label_str = []
         if not Path(annotation).exists():
@@ -435,12 +417,8 @@ class BaseVOCDataset(BaseDataset[_TArray, _TTarget, list[str], str]):
         for obj in root.findall("object"):
             label_str.append(obj.findtext("name", default=""))
             additional_meta["pose"].append(obj.findtext("pose", default=""))
-            additional_meta["truncated"].append(
-                int(obj.findtext("truncated", default="-1"))
-            )
-            additional_meta["difficult"].append(
-                int(obj.findtext("difficult", default="-1"))
-            )
+            additional_meta["truncated"].append(int(obj.findtext("truncated", default="-1")))
+            additional_meta["difficult"].append(int(obj.findtext("difficult", default="-1")))
             boxes.append(
                 [
                     float(obj.findtext("bndbox/xmin", default="0")),
@@ -454,9 +432,7 @@ class BaseVOCDataset(BaseDataset[_TArray, _TTarget, list[str], str]):
 
 
 class VOCDetection(
-    BaseVOCDataset[
-        NDArray[np.number[Any]], ObjectDetectionTarget[NDArray[np.number[Any]]]
-    ],
+    BaseVOCDataset[NDArray[np.number[Any]], ObjectDetectionTarget[NDArray[np.number[Any]]]],
     BaseODDataset[NDArray[np.number[Any]], list[str], str],
     BaseDatasetNumpyMixin,
 ):

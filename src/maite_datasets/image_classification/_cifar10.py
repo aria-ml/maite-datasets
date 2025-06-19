@@ -24,9 +24,7 @@ CIFARClassStringMap = Literal[
     "ship",
     "truck",
 ]
-TCIFARClassMap = TypeVar(
-    "TCIFARClassMap", CIFARClassStringMap, int, list[CIFARClassStringMap], list[int]
-)
+TCIFARClassMap = TypeVar("TCIFARClassMap", CIFARClassStringMap, int, list[CIFARClassStringMap], list[int])
 
 
 class CIFAR10(BaseICDataset[NDArray[np.number[Any]]], BaseDatasetNumpyMixin):
@@ -91,9 +89,7 @@ class CIFAR10(BaseICDataset[NDArray[np.number[Any]]], BaseDatasetNumpyMixin):
         self,
         root: str | Path,
         image_set: Literal["train", "test", "base"] = "train",
-        transforms: Transform[NDArray[np.number[Any]]]
-        | Sequence[Transform[NDArray[np.number[Any]]]]
-        | None = None,
+        transforms: Transform[NDArray[np.number[Any]]] | Sequence[Transform[NDArray[np.number[Any]]]] | None = None,
         download: bool = False,
         verbose: bool = False,
     ) -> None:
@@ -105,9 +101,7 @@ class CIFAR10(BaseICDataset[NDArray[np.number[Any]]], BaseDatasetNumpyMixin):
             verbose,
         )
 
-    def _load_bin_data(
-        self, data_folder: list[Path]
-    ) -> tuple[list[str], list[int], dict[str, Any]]:
+    def _load_bin_data(self, data_folder: list[Path]) -> tuple[list[str], list[int], dict[str, Any]]:
         batch_nums = np.zeros(60000, dtype=np.uint8)
         all_labels = np.zeros(60000, dtype=np.uint8)
         all_images = np.zeros((60000, 3, 32, 32), dtype=np.uint8)
@@ -115,9 +109,7 @@ class CIFAR10(BaseICDataset[NDArray[np.number[Any]]], BaseDatasetNumpyMixin):
         for batch_file in data_folder:
             # Get batch parameters
             batch_type = "test" if "test" in batch_file.stem else "train"
-            batch_num = (
-                5 if batch_type == "test" else int(batch_file.stem.split("_")[-1]) - 1
-            )
+            batch_num = 5 if batch_type == "test" else int(batch_file.stem.split("_")[-1]) - 1
 
             # Load data
             batch_images, batch_labels = self._unpack_batch_files(batch_file)
@@ -193,9 +185,7 @@ class CIFAR10(BaseICDataset[NDArray[np.number[Any]]], BaseDatasetNumpyMixin):
             {"batch_num": batch_nums.tolist()},
         )
 
-    def _unpack_batch_files(
-        self, file_path: Path
-    ) -> tuple[NDArray[np.uint8], NDArray[np.uint8]]:
+    def _unpack_batch_files(self, file_path: Path) -> tuple[NDArray[np.uint8], NDArray[np.uint8]]:
         # Load pickle data with latin1 encoding
         with file_path.open("rb") as f:
             buffer = np.frombuffer(f.read(), dtype=np.uint8)

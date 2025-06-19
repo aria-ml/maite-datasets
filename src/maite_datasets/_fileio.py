@@ -23,9 +23,7 @@ def _print(text: str, verbose: bool) -> None:
         print(text)
 
 
-def _validate_file(
-    fpath: Path | str, file_md5: str, md5: bool = False, chunk_size: int = 65535
-) -> bool:
+def _validate_file(fpath: Path | str, file_md5: str, md5: bool = False, chunk_size: int = 65535) -> bool:
     hasher = hashlib.md5(usedforsecurity=False) if md5 else hashlib.sha256()
     with open(fpath, "rb") as fpath_file:
         while chunk := fpath_file.read(chunk_size):
@@ -33,28 +31,20 @@ def _validate_file(
     return hasher.hexdigest() == file_md5
 
 
-def _download_dataset(
-    url: str, file_path: Path, timeout: int = 60, verbose: bool = False
-) -> None:
+def _download_dataset(url: str, file_path: Path, timeout: int = 60, verbose: bool = False) -> None:
     """Download a single resource from its URL to the `data_folder`."""
     error_msg = "URL fetch failure on {}: {} -- {}"
     try:
         response = requests.get(url, stream=True, timeout=timeout)
         response.raise_for_status()
     except requests.exceptions.HTTPError as e:
-        raise RuntimeError(
-            f"{error_msg.format(url, e.response.status_code, e.response.reason)}"
-        ) from e
+        raise RuntimeError(f"{error_msg.format(url, e.response.status_code, e.response.reason)}") from e
     except requests.exceptions.RequestException as e:
         raise ValueError(f"{error_msg.format(url, 'Unknown error', str(e))}") from e
 
     total_size = int(response.headers.get("content-length", 0))
     block_size = 8192  # 8 KB
-    progress_bar = (
-        None
-        if tqdm is None
-        else tqdm(total=total_size, unit="iB", unit_scale=True, disable=not verbose)
-    )
+    progress_bar = None if tqdm is None else tqdm(total=total_size, unit="iB", unit_scale=True, disable=not verbose)
 
     with open(file_path, "wb") as f:
         for chunk in response.iter_content(block_size):
@@ -72,9 +62,7 @@ def _extract_zip_archive(file_path: Path, extract_to: Path) -> None:
             zip_ref.extractall(extract_to)  # noqa: S202
             file_path.unlink()
     except zipfile.BadZipFile:
-        raise FileNotFoundError(
-            f"{file_path.name} is not a valid zip file, skipping extraction."
-        )
+        raise FileNotFoundError(f"{file_path.name} is not a valid zip file, skipping extraction.")
 
 
 def _extract_tar_archive(file_path: Path, extract_to: Path) -> None:
@@ -84,9 +72,7 @@ def _extract_tar_archive(file_path: Path, extract_to: Path) -> None:
             tar_ref.extractall(extract_to)  # noqa: S202
             file_path.unlink()
     except tarfile.TarError:
-        raise FileNotFoundError(
-            f"{file_path.name} is not a valid tar file, skipping extraction."
-        )
+        raise FileNotFoundError(f"{file_path.name} is not a valid tar file, skipping extraction.")
 
 
 def _extract_archive(
@@ -135,11 +121,7 @@ def _ensure_exists(
         file_ext = file_path.suffixes[0]
         compression = True
 
-    check_path = (
-        alternate_path
-        if alternate_path.exists() and not file_path.exists()
-        else file_path
-    )
+    check_path = alternate_path if alternate_path.exists() and not file_path.exists() else file_path
 
     # Download file if it doesn't exist.
     if not check_path.exists() and download:
@@ -147,9 +129,7 @@ def _ensure_exists(
         _download_dataset(url, check_path, verbose=verbose)
 
         if not _validate_file(check_path, checksum, md5):
-            raise Exception(
-                "File checksum mismatch. Remove current file and retry download."
-            )
+            raise Exception("File checksum mismatch. Remove current file and retry download.")
 
         # If the file is a zip, tar or tgz extract it into the designated folder.
         if file_ext in ARCHIVE_ENDINGS:
@@ -164,9 +144,7 @@ def _ensure_exists(
         )
     else:
         if not _validate_file(check_path, checksum, md5):
-            raise Exception(
-                "File checksum mismatch. Remove current file and retry download."
-            )
+            raise Exception("File checksum mismatch. Remove current file and retry download.")
         _print(f"{filename} already exists, skipping download.", verbose)
 
         if file_ext in ARCHIVE_ENDINGS:

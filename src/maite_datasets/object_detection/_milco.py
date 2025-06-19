@@ -13,9 +13,7 @@ from maite_datasets._mixin._numpy import BaseDatasetNumpyMixin
 from maite_datasets._protocols import Transform
 
 
-class MILCO(
-    BaseODDataset[NDArray[np.number[Any]], list[str], str], BaseDatasetNumpyMixin
-):
+class MILCO(BaseODDataset[NDArray[np.number[Any]], list[str], str], BaseDatasetNumpyMixin):
     """
     A side-scan sonar dataset focused on mine-like object detection.
 
@@ -118,9 +116,7 @@ class MILCO(
         self,
         root: str | Path,
         image_set: Literal["train", "operational", "base"] = "train",
-        transforms: Transform[NDArray[np.number[Any]]]
-        | Sequence[Transform[NDArray[np.number[Any]]]]
-        | None = None,
+        transforms: Transform[NDArray[np.number[Any]]] | Sequence[Transform[NDArray[np.number[Any]]]] | None = None,
         download: bool = False,
         verbose: bool = False,
     ) -> None:
@@ -180,9 +176,7 @@ class MILCO(
 
         return data, annotations, file_data
 
-    def _read_annotations(
-        self, annotation: str
-    ) -> tuple[list[list[float]], list[int], dict[str, Any]]:
+    def _read_annotations(self, annotation: str) -> tuple[list[list[float]], list[int], dict[str, Any]]:
         """Function for extracting the info out of the text files"""
         labels: list[int] = []
         boxes: list[list[float]] = []

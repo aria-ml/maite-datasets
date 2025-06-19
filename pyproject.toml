@@ -97,6 +97,20 @@ fail_under = 90
 [tool.codespell]
 skip = './*env*,./output,uv.lock'
 
+[tool.ruff]
+exclude = [
+  ".github",
+  ".vscode",
+  "*env*",
+  ".nox",
+]
+line-length = 120
+indent-width = 4
+target-version = "py39"
+
+[tool.ruff.lint.isort]
+known-first-party = ["maite_datasets"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/maite_datasets"]
 

@@ -19,9 +19,7 @@ class TestBaseTorchMixin:
 
     def test_one_hot_encode_list(self):
         mock = self.MockDataset()
-        assert torch.equal(
-            mock._one_hot_encode([0, 1]), torch.tensor([[1.0, 0.0], [0.0, 1.0]])
-        )
+        assert torch.equal(mock._one_hot_encode([0, 1]), torch.tensor([[1.0, 0.0], [0.0, 1.0]]))
 
     @patch("maite_datasets._mixin._torch.Image")
     def test_read_file(self, mock_image):

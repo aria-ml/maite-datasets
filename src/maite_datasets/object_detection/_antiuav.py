@@ -14,9 +14,7 @@ from maite_datasets._mixin._numpy import BaseDatasetNumpyMixin
 from maite_datasets._protocols import Transform
 
 
-class AntiUAVDetection(
-    BaseODDataset[NDArray[np.number[Any]], list[str], str], BaseDatasetNumpyMixin
-):
+class AntiUAVDetection(BaseODDataset[NDArray[np.number[Any]], list[str], str], BaseDatasetNumpyMixin):
     """
     A UAV detection dataset focused on detecting UAVs in natural images against large variation in backgrounds.
 
@@ -103,9 +101,7 @@ class AntiUAVDetection(
         self,
         root: str | Path,
         image_set: Literal["train", "val", "test", "base"] = "train",
-        transforms: Transform[NDArray[np.number[Any]]]
-        | Sequence[Transform[NDArray[np.number[Any]]]]
-        | None = None,
+        transforms: Transform[NDArray[np.number[Any]]] | Sequence[Transform[NDArray[np.number[Any]]]] | None = None,
         download: bool = False,
         verbose: bool = False,
     ) -> None:
@@ -128,9 +124,7 @@ class AntiUAVDetection(
 
             for resource in self._resources:
                 self._resource = resource
-                resource_filepaths, resource_targets, resource_metadata = (
-                    super()._load_data()
-                )
+                resource_filepaths, resource_targets, resource_metadata = super()._load_data()
                 filepaths.extend(resource_filepaths)
                 targets.extend(resource_targets)
                 metadata_list.append(resource_metadata)
@@ -148,9 +142,7 @@ class AntiUAVDetection(
             for resource in self._resources:
                 if self.image_set in resource.filename:
                     self._resource = resource
-                    resource_filepaths, resource_targets, resource_metadata = (
-                        super()._load_data()
-                    )
+                    resource_filepaths, resource_targets, resource_metadata = super()._load_data()
                     filepaths.extend(resource_filepaths)
                     targets.extend(resource_targets)
                     datum_metadata.update(resource_metadata)
@@ -164,17 +156,13 @@ class AntiUAVDetection(
         if not data_folder:
             raise FileNotFoundError
 
-        file_data = {
-            "image_id": [f"{resource_name}_{entry.name}" for entry in data_folder]
-        }
+        file_data = {"image_id": [f"{resource_name}_{entry.name}" for entry in data_folder]}
         data = [str(entry) for entry in data_folder]
         annotations = sorted(str(entry) for entry in (base_dir / "xml").glob("*.xml"))
 
         return data, annotations, file_data
 
-    def _read_annotations(
-        self, annotation: str
-    ) -> tuple[list[list[float]], list[int], dict[str, Any]]:
+    def _read_annotations(self, annotation: str) -> tuple[list[list[float]], list[int], dict[str, Any]]:
         """Function for extracting the info for the label and boxes"""
         boxes: list[list[float]] = []
         labels = []

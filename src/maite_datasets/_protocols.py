@@ -174,9 +174,7 @@ class ObjectDetectionTarget(Protocol):
     def scores(self) -> ArrayLike: ...
 
 
-ObjectDetectionDatum: TypeAlias = tuple[
-    ArrayLike, ObjectDetectionTarget, Mapping[str, Any]
-]
+ObjectDetectionDatum: TypeAlias = tuple[ArrayLike, ObjectDetectionTarget, Mapping[str, Any]]
 """
 Type alias for an object detection datum tuple.
 

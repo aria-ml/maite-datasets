@@ -12,12 +12,8 @@ from maite_datasets._base import BaseICDataset, DataLocation
 from maite_datasets._mixin._numpy import BaseDatasetNumpyMixin
 from maite_datasets._protocols import Transform
 
-MNISTClassStringMap = Literal[
-    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"
-]
-TMNISTClassMap = TypeVar(
-    "TMNISTClassMap", MNISTClassStringMap, int, list[MNISTClassStringMap], list[int]
-)
+MNISTClassStringMap = Literal["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
+TMNISTClassMap = TypeVar("TMNISTClassMap", MNISTClassStringMap, int, list[MNISTClassStringMap], list[int])
 CorruptionStringMap = Literal[
     "identity",
     "shot_noise",
@@ -122,9 +118,7 @@ class MNIST(BaseICDataset[NDArray[np.number[Any]]], BaseDatasetNumpyMixin):
         root: str | Path,
         image_set: Literal["train", "test", "base"] = "train",
         corruption: CorruptionStringMap | None = None,
-        transforms: Transform[NDArray[np.number[Any]]]
-        | Sequence[Transform[NDArray[np.number[Any]]]]
-        | None = None,
+        transforms: Transform[NDArray[np.number[Any]]] | Sequence[Transform[NDArray[np.number[Any]]]] | None = None,
         download: bool = False,
         verbose: bool = False,
     ) -> None:
@@ -182,18 +176,12 @@ class MNIST(BaseICDataset[NDArray[np.number[Any]]], BaseDatasetNumpyMixin):
 
         return data, labels
 
-    def _grab_data(
-        self, path: Path
-    ) -> tuple[NDArray[np.number[Any]], NDArray[np.uintp]]:
+    def _grab_data(self, path: Path) -> tuple[NDArray[np.number[Any]], NDArray[np.uintp]]:
         """Function to load in the data numpy array"""
         with np.load(path, allow_pickle=True) as data_array:
             if self.image_set == "base":
-                data = np.concatenate(
-                    [data_array["x_train"], data_array["x_test"]], axis=0
-                )
-                labels = np.concatenate(
-                    [data_array["y_train"], data_array["y_test"]], axis=0
-                ).astype(np.uintp)
+                data = np.concatenate([data_array["x_train"], data_array["x_test"]], axis=0)
+                labels = np.concatenate([data_array["y_train"], data_array["y_test"]], axis=0).astype(np.uintp)
             else:
                 data, labels = (
                     data_array[f"x_{self.image_set}"],
