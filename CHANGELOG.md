@@ -1,5 +1,9 @@
 # Changelog for maite-datasets
 
+## v0.0.3
+
+- [feat] Add dataset validation utility
+
 ## v0.0.2
 
 - [feat] Add dataset builders for custom datasets

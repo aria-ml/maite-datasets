@@ -104,7 +104,7 @@ coverage:
   before_script:
     - uv pip install coverage --system
   script:
-    - cp --recursive $(pwd) /dataeval
+    - cp --recursive $(pwd) /maite-datasets
     - coverage combine ./output
     - coverage report -m --skip-empty --precision=2
     - coverage xml --skip-empty
