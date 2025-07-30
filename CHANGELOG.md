@@ -3,6 +3,7 @@
 ## v0.0.3
 
 - [feat] Add dataset validation utility
+- [feat] Add collate helper functions for dataloaders
 
 ## v0.0.2
 

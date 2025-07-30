@@ -10,4 +10,5 @@ wheels/
 .venv
 
 # Test output
+.nox/
 output/

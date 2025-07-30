@@ -19,6 +19,7 @@ from maite_datasets._validate import (
     validate_dataset,
 )
 
+
 def make_dataset(data, metadata):
     class MockDataset:
         def __init__(self, data):
