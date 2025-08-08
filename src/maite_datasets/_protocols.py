@@ -1,14 +1,14 @@
 """
-Common type protocols used for interoperability with MAITE.
+Common type protocols used for interoperability.
 """
 
+from collections.abc import Iterator
 import sys
 from typing import (
     Any,
     Generic,
-    Iterator,
-    Mapping,
     Protocol,
+    TypeAlias,
     TypedDict,
     TypeVar,
     runtime_checkable,
@@ -36,29 +36,10 @@ See Also
 @runtime_checkable
 class Array(Protocol):
     """
-    Protocol for array objects providing interoperability with DataEval.
+    Protocol for interoperable array objects.
 
     Supports common array representations with popular libraries like
     PyTorch, Tensorflow and JAX, as well as NumPy arrays.
-
-    Example
-    -------
-    >>> import numpy as np
-    >>> import torch
-    >>> from maite_datasets._typing import Array
-
-    Create array objects
-
-    >>> ndarray = np.random.random((10, 10))
-    >>> tensor = torch.tensor([1, 2, 3])
-
-    Check type at runtime
-
-    >>> isinstance(ndarray, Array)
-    True
-
-    >>> isinstance(tensor, Array)
-    True
     """
 
     @property
@@ -71,6 +52,7 @@ class Array(Protocol):
 
 _T = TypeVar("_T")
 _T_co = TypeVar("_T_co", covariant=True)
+_T_cn = TypeVar("_T_cn", contravariant=True)
 
 
 class DatasetMetadata(TypedDict, total=False):
@@ -87,6 +69,19 @@ class DatasetMetadata(TypedDict, total=False):
 
     id: Required[ReadOnly[str]]
     index2label: NotRequired[ReadOnly[dict[int, str]]]
+
+
+class DatumMetadata(TypedDict, total=False):
+    """
+    Datum level metadata required for all `AnnotatedDataset` classes.
+
+    Attributes
+    ----------
+    id : Required[str]
+        A unique identifier for the datum
+    """
+
+    id: Required[ReadOnly[str]]
 
 
 @runtime_checkable
@@ -134,7 +129,7 @@ class AnnotatedDataset(Dataset[_T_co], Generic[_T_co], Protocol):
 # ========== IMAGE CLASSIFICATION DATASETS ==========
 
 
-ImageClassificationDatum: TypeAlias = tuple[ArrayLike, ArrayLike, Mapping[str, Any]]
+ImageClassificationDatum: TypeAlias = tuple[ArrayLike, ArrayLike, DatumMetadata]
 """
 Type alias for an image classification datum tuple.
 
@@ -174,7 +169,7 @@ class ObjectDetectionTarget(Protocol):
     def scores(self) -> ArrayLike: ...
 
 
-ObjectDetectionDatum: TypeAlias = tuple[ArrayLike, ObjectDetectionTarget, Mapping[str, Any]]
+ObjectDetectionDatum: TypeAlias = tuple[ArrayLike, ObjectDetectionTarget, DatumMetadata]
 """
 Type alias for an object detection datum tuple.
 
