@@ -49,8 +49,8 @@ class BaseDatasetReader(ABC):
     """
 
     def __init__(self, dataset_path: str | Path, dataset_id: str | None = None) -> None:
-        self.dataset_path = Path(dataset_path)
-        self._dataset_id = dataset_id or self.dataset_path.name
+        self.dataset_path: Path = Path(dataset_path)
+        self.dataset_id: str = dataset_id or self.dataset_path.name
 
         # Basic path validation
         if not self.dataset_path.exists():

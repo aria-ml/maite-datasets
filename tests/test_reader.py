@@ -141,7 +141,7 @@ class TestBaseDatasetReader:
 
         # Test common interface
         assert hasattr(reader, "dataset_path")
-        assert hasattr(reader, "_dataset_id")
+        assert hasattr(reader, "dataset_id")
         assert hasattr(reader, "index2label")
         assert hasattr(reader, "get_dataset")
         assert hasattr(reader, "validate_structure")
@@ -192,7 +192,7 @@ class TestCOCODatasetReader:
         reader = COCODatasetReader(temp_coco_dataset)
 
         assert reader.dataset_path == temp_coco_dataset
-        assert reader._dataset_id == temp_coco_dataset.name
+        assert reader.dataset_id == temp_coco_dataset.name
         assert len(reader.index2label) == 3  # From classes.txt
         assert reader.index2label[0] == "person"
 
@@ -297,9 +297,9 @@ class TestYOLODatasetReader:
         reader = YOLODatasetReader(temp_yolo_dataset)
 
         assert reader.dataset_path == temp_yolo_dataset
-        assert reader._dataset_id == temp_yolo_dataset.name
+        assert reader.dataset_id == temp_yolo_dataset.name
         assert len(reader.index2label) == 3
-        assert len(reader.image_files) == 2
+        assert len(reader._image_files) == 2
 
     def test_initialization_missing_path(self):
         """Test initialization with missing dataset path."""

@@ -1,5 +1,13 @@
 # Changelog for maite-datasets
 
+## v0.0.5
+
+- [fix] Fix test and type check errors
+
+## v0.0.4
+
+- [feat] Add COCO and YOLO dataset readers
+
 ## v0.0.3
 
 - [feat] Add dataset validation utility

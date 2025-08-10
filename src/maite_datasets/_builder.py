@@ -22,11 +22,12 @@ from maite_datasets._protocols import (
     DatasetMetadata,
     ImageClassificationDataset,
     ObjectDetectionDataset,
+    DatumMetadata,
 )
 
 
-def _ensure_id(index: int, metadata: dict[str, Any]) -> dict[str, Any]:
-    return {"id": index, **metadata} if "id" not in metadata else metadata
+def _ensure_id(index: int, metadata: dict[str, Any]) -> DatumMetadata:
+    return DatumMetadata(**({"id": index, **metadata} if "id" not in metadata else metadata))
 
 
 def _validate_data(
@@ -141,7 +142,7 @@ class CustomImageClassificationDataset(BaseAnnotatedDataset[Sequence[int]], Imag
             self.__class__.__name__ = name
             self.__class__.__qualname__ = name
 
-    def __getitem__(self, idx: int, /) -> tuple[Array, Array, dict[str, Any]]:
+    def __getitem__(self, idx: int, /) -> tuple[Array, Array, DatumMetadata]:
         one_hot = [0.0] * len(self._index2label)
         one_hot[self._labels[idx]] = 1.0
         return (
@@ -206,7 +207,7 @@ class CustomObjectDetectionDataset(BaseAnnotatedDataset[Sequence[Sequence[int]]]
     def metadata(self) -> DatasetMetadata:
         return DatasetMetadata(id=self._id, index2label=self._index2label)
 
-    def __getitem__(self, idx: int, /) -> tuple[Array, ObjectDetectionTarget, dict[str, Any]]:
+    def __getitem__(self, idx: int, /) -> tuple[Array, ObjectDetectionTarget, DatumMetadata]:
         return (
             self._images[idx],
             self.ObjectDetectionTarget(self._labels[idx], self._bboxes[idx], len(self._classes)),

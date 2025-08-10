@@ -88,29 +88,29 @@ class YOLODatasetReader(BaseDatasetReader):
         dataset_id: str | None = None,
         image_extensions: list[str] | None = None,
     ) -> None:
-        self.images_dir = images_dir
-        self.labels_dir = labels_dir
-        self.classes_file = classes_file
+        self._images_dir = images_dir
+        self._labels_dir = labels_dir
+        self._classes_file = classes_file
 
         if image_extensions is None:
             image_extensions = [".jpg", ".jpeg", ".png", ".bmp"]
-        self.image_extensions = [ext.lower() for ext in image_extensions]
+        self._image_extensions = [ext.lower() for ext in image_extensions]
 
         # Initialize base class
         super().__init__(dataset_path, dataset_id)
 
     def _initialize_format_specific(self) -> None:
         """Initialize YOLO-specific components."""
-        self.images_path = self.dataset_path / self.images_dir
-        self.labels_path = self.dataset_path / self.labels_dir
-        self.classes_path = self.dataset_path / self.classes_file
+        self._images_path = self.dataset_path / self._images_dir
+        self._labels_path = self.dataset_path / self._labels_dir
+        self._classes_path = self.dataset_path / self._classes_file
 
-        if not self.images_path.exists():
-            raise FileNotFoundError(f"Images directory not found: {self.images_path}")
-        if not self.labels_path.exists():
-            raise FileNotFoundError(f"Labels directory not found: {self.labels_path}")
-        if not self.classes_path.exists():
-            raise FileNotFoundError(f"Classes file not found: {self.classes_path}")
+        if not self._images_path.exists():
+            raise FileNotFoundError(f"Images directory not found: {self._images_path}")
+        if not self._labels_path.exists():
+            raise FileNotFoundError(f"Labels directory not found: {self._labels_path}")
+        if not self._classes_path.exists():
+            raise FileNotFoundError(f"Classes file not found: {self._classes_path}")
 
         self._load_class_names()
         self._find_image_files()
@@ -130,32 +130,32 @@ class YOLODatasetReader(BaseDatasetReader):
         stats = {}
 
         # Check labels directory
-        labels_path = self.dataset_path / self.labels_dir
+        labels_path = self.dataset_path / self._labels_dir
         if not labels_path.exists():
-            issues.append(f"Missing {self.labels_dir}/ directory")
+            issues.append(f"Missing {self._labels_dir}/ directory")
         else:
             label_files = list(labels_path.glob("*.txt"))
             stats["num_label_files"] = len(label_files)
             if len(label_files) == 0:
-                issues.append(f"No label files found in {self.labels_dir}/ directory")
+                issues.append(f"No label files found in {self._labels_dir}/ directory")
             else:
                 # Validate label file format (sample check)
                 label_issues = self._validate_yolo_label_format(labels_path)
                 issues.extend(label_issues)
 
         # Check required classes.txt
-        classes_path = self.dataset_path / self.classes_file
+        classes_path = self.dataset_path / self._classes_file
         if not classes_path.exists():
-            issues.append(f"Missing required {self.classes_file} file")
+            issues.append(f"Missing required {self._classes_file} file")
         else:
             try:
                 with open(classes_path) as f:
                     class_lines = [line.strip() for line in f if line.strip()]
                 stats["num_classes"] = len(class_lines)
                 if len(class_lines) == 0:
-                    issues.append(f"{self.classes_file} is empty")
+                    issues.append(f"{self._classes_file} is empty")
             except Exception as e:
-                issues.append(f"Error reading {self.classes_file}: {e}")
+                issues.append(f"Error reading {self._classes_file}: {e}")
 
         return issues, stats
 
@@ -167,6 +167,7 @@ class YOLODatasetReader(BaseDatasetReader):
         if not label_files:
             return issues
 
+        label_files.sort()
         sample_label = label_files[0]
         try:
             with open(sample_label) as f:
@@ -197,19 +198,19 @@ class YOLODatasetReader(BaseDatasetReader):
 
     def _load_class_names(self) -> None:
         """Load class names from classes file."""
-        with open(self.classes_path) as f:
+        with open(self._classes_path) as f:
             class_names = [line.strip() for line in f if line.strip()]
         self._index2label = {idx: name for idx, name in enumerate(class_names)}
 
     def _find_image_files(self) -> None:
         """Find all valid image files."""
-        self.image_files = []
-        for ext in self.image_extensions:
-            self.image_files.extend(self.images_path.glob(f"*{ext}"))
-        self.image_files.sort()
+        self._image_files = []
+        for ext in self._image_extensions:
+            self._image_files.extend(self._images_path.glob(f"*{ext}"))
+        self._image_files.sort()
 
-        if not self.image_files:
-            raise ValueError(f"No image files found in {self.images_path}")
+        if not self._image_files:
+            raise ValueError(f"No image files found in {self._images_path}")
 
 
 class _YOLODataset:
@@ -221,15 +222,15 @@ class _YOLODataset:
     @property
     def metadata(self) -> DatasetMetadata:
         return DatasetMetadata(
-            id=self.reader._dataset_id,
+            id=self.reader.dataset_id,
             index2label=self.reader.index2label,
         )
 
     def __len__(self) -> int:
-        return len(self.reader.image_files)
+        return len(self.reader._image_files)
 
     def __getitem__(self, index: int) -> ObjectDetectionDatum:
-        image_path = self.reader.image_files[index]
+        image_path = self.reader._image_files[index]
 
         # Load image
         image = np.array(Image.open(image_path).convert("RGB"))
@@ -237,7 +238,7 @@ class _YOLODataset:
         image = np.transpose(image, (2, 0, 1))  # Convert to CHW format
 
         # Load corresponding label file
-        label_path = self.reader.labels_path / f"{image_path.stem}.txt"
+        label_path = self.reader._labels_path / f"{image_path.stem}.txt"
 
         annotation_metadata = []
         if label_path.exists():
@@ -295,18 +296,20 @@ class _YOLODataset:
 
         # Create comprehensive datum metadata
         datum_metadata = DatumMetadata(
-            id=f"{self.reader._dataset_id}_{image_path.stem}",
-            # Image-level metadata
-            file_name=image_path.name,
-            file_path=str(image_path),
-            width=img_width,
-            height=img_height,
-            # Label file metadata
-            label_file=label_path.name if label_path.exists() else None,
-            label_file_exists=label_path.exists(),
-            # Annotation metadata
-            annotations=annotation_metadata,
-            num_annotations=len(annotation_metadata),
+            **{
+                "id": f"{self.reader.dataset_id}_{image_path.stem}",
+                # Image-level metadata
+                "file_name": image_path.name,
+                "file_path": str(image_path),
+                "width": img_width,
+                "height": img_height,
+                # Label file metadata
+                "label_file": label_path.name if label_path.exists() else None,
+                "label_file_exists": label_path.exists(),
+                # Annotation metadata
+                "annotations": annotation_metadata,
+                "num_annotations": len(annotation_metadata),
+            }
         )
 
         return image, target, datum_metadata
