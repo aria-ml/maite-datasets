@@ -61,6 +61,17 @@ class BaseDataset(Dataset[_T]):
 
     def __len__(self) -> int: ...
 
+    def __str__(self) -> str:
+        nt = "\n    "
+        title = f"{self.__class__.__name__.replace('Dataset', '')} Dataset"
+        sep = "-" * len(title)
+        attrs = [
+            f"{' '.join(w.capitalize() for w in k.split('_'))}: {v}"
+            for k, v in self.__dict__.items()
+            if not k.startswith("_")
+        ]
+        return f"{title}\n{sep}{nt}{nt.join(attrs)}"
+
 
 class BaseDownloadedDataset(
     BaseDataset[tuple[_TArray, _TTarget, DatumMetadata]],
@@ -114,13 +125,6 @@ class BaseDownloadedDataset(
         self.path: Path = self._get_dataset_dir()
         self._filepaths, self._targets, self._datum_metadata = self._load_data()
         self.size: int = len(self._filepaths)
-
-    def __str__(self) -> str:
-        nt = "\n    "
-        title = f"{self.__class__.__name__} Dataset"
-        sep = "-" * len(title)
-        attrs = [f"{k.capitalize()}: {v}" for k, v in self.__dict__.items() if not k.startswith("_")]
-        return f"{title}\n{sep}{nt}{nt.join(attrs)}"
 
     @property
     def label2index(self) -> dict[str, int]:

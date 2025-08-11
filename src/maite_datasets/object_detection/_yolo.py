@@ -10,7 +10,7 @@ from typing import Any
 import numpy as np
 from PIL import Image
 
-from maite_datasets._base import GenericObjectDetectionTarget
+from maite_datasets._base import BaseDataset, GenericObjectDetectionTarget
 from maite_datasets._protocols import DatasetMetadata, DatumMetadata, ObjectDetectionDataset, ObjectDetectionDatum
 from maite_datasets._reader import BaseDatasetReader
 
@@ -123,7 +123,7 @@ class YOLODatasetReader(BaseDatasetReader[ObjectDetectionDataset]):
 
     def create_dataset(self) -> ObjectDetectionDataset:
         """Create YOLO dataset implementation."""
-        return _YOLODataset(self)
+        return YOLODataset(self)
 
     def _validate_format_specific(self) -> tuple[list[str], dict[str, Any]]:
         """Validate YOLO format specific files and structure."""
@@ -214,24 +214,27 @@ class YOLODatasetReader(BaseDatasetReader[ObjectDetectionDataset]):
             raise ValueError(f"No image files found in {self._images_path}")
 
 
-class _YOLODataset:
+class YOLODataset(BaseDataset):
     """Internal YOLO dataset implementation."""
 
     def __init__(self, reader: YOLODatasetReader) -> None:
-        self.reader = reader
+        self._reader = reader
 
-    @property
-    def metadata(self) -> DatasetMetadata:
-        return DatasetMetadata(
-            id=self.reader.dataset_id,
-            index2label=self.reader.index2label,
+        self.root = reader.dataset_path
+        self.images_path = reader._images_path
+        self.annotation_path = reader._labels_path
+        self.size = len(reader._image_files)
+        self.classes = reader.index2label
+        self.metadata = DatasetMetadata(
+            id=self._reader.dataset_id,
+            index2label=self._reader.index2label,
         )
 
     def __len__(self) -> int:
-        return len(self.reader._image_files)
+        return len(self._reader._image_files)
 
     def __getitem__(self, index: int) -> ObjectDetectionDatum:
-        image_path = self.reader._image_files[index]
+        image_path = self._reader._image_files[index]
 
         # Load image
         image = np.asarray(Image.open(image_path).convert("RGB"), dtype=np.uint8)
@@ -239,7 +242,7 @@ class _YOLODataset:
         image = np.transpose(image, (2, 0, 1))  # Convert to CHW format
 
         # Load corresponding label file
-        label_path = self.reader._labels_path / f"{image_path.stem}.txt"
+        label_path = self._reader._labels_path / f"{image_path.stem}.txt"
 
         annotation_metadata = []
         if label_path.exists():
@@ -298,7 +301,7 @@ class _YOLODataset:
         # Create comprehensive datum metadata
         datum_metadata = DatumMetadata(
             **{
-                "id": f"{self.reader.dataset_id}_{image_path.stem}",
+                "id": f"{self._reader.dataset_id}_{image_path.stem}",
                 # Image-level metadata
                 "file_name": image_path.name,
                 "file_path": str(image_path),

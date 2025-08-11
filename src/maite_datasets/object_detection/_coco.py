@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 from PIL import Image
 
-from maite_datasets._base import GenericObjectDetectionTarget
+from maite_datasets._base import BaseDataset, GenericObjectDetectionTarget
 from maite_datasets._protocols import DatasetMetadata, DatumMetadata, ObjectDetectionDataset, ObjectDetectionDatum
 from maite_datasets._reader import BaseDatasetReader
 
@@ -132,7 +132,7 @@ class COCODatasetReader(BaseDatasetReader[ObjectDetectionDataset]):
 
     def create_dataset(self) -> ObjectDetectionDataset:
         """Create COCO dataset implementation."""
-        return _COCODataset(self)
+        return COCODataset(self)
 
     def _validate_format_specific(self) -> tuple[list[str], dict[str, Any]]:
         """Validate COCO format specific files and structure."""
@@ -199,34 +199,37 @@ class COCODatasetReader(BaseDatasetReader[ObjectDetectionDataset]):
         self._index2label = {idx: name for idx, name in enumerate(class_names)}
 
 
-class _COCODataset:
+class COCODataset(BaseDataset):
     """Internal COCO dataset implementation."""
 
     def __init__(self, reader: COCODatasetReader) -> None:
-        self.reader = reader
-        self.image_ids = list(reader._image_id_to_info.keys())
+        self._reader = reader
+        self._image_ids = list(reader._image_id_to_info.keys())
 
-    @property
-    def metadata(self) -> DatasetMetadata:
-        return DatasetMetadata(
-            id=self.reader.dataset_id,
-            index2label=self.reader.index2label,
+        self.root = reader.dataset_path
+        self.images_path = reader._images_path
+        self.annotation_path = reader._annotation_path
+        self.size = len(reader._image_id_to_info)
+        self.classes = reader.index2label
+        self.metadata = DatasetMetadata(
+            id=self._reader.dataset_id,
+            index2label=self._reader.index2label,
         )
 
     def __len__(self) -> int:
-        return len(self.image_ids)
+        return len(self._image_ids)
 
     def __getitem__(self, index: int) -> ObjectDetectionDatum:
-        image_id = self.image_ids[index]
-        image_info = self.reader._image_id_to_info[image_id]
+        image_id = self._image_ids[index]
+        image_info = self._reader._image_id_to_info[image_id]
 
         # Load image
-        image_path = self.reader._images_path / image_info["file_name"]
+        image_path = self._reader._images_path / image_info["file_name"]
         image = np.array(Image.open(image_path).convert("RGB"))
         image = np.transpose(image, (2, 0, 1))  # Convert to CHW format
 
         # Get annotations for this image
-        annotations = self.reader.image_id_to_annotations.get(image_id, [])
+        annotations = self._reader.image_id_to_annotations.get(image_id, [])
 
         if annotations:
             boxes = []
@@ -239,7 +242,7 @@ class _COCODataset:
                 boxes.append([x, y, x + w, y + h])
 
                 # Map category_id to class index
-                cat_idx = self.reader._category_id_to_idx[ann["category_id"]]
+                cat_idx = self._reader._category_id_to_idx[ann["category_id"]]
                 labels.append(cat_idx)
 
                 # Collect annotation metadata
@@ -270,7 +273,7 @@ class _COCODataset:
         # Create comprehensive datum metadata
         datum_metadata = DatumMetadata(
             **{
-                "id": f"{self.reader.dataset_id}_{image_id}",
+                "id": f"{self._reader.dataset_id}_{image_id}",
                 # Image-level metadata
                 "coco_image_id": image_id,
                 "file_name": image_info["file_name"],

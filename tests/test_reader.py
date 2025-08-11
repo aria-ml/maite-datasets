@@ -10,9 +10,8 @@ from PIL import Image
 
 # Import the modules to test
 from maite_datasets._reader import BaseDatasetReader
-from maite_datasets._reader._base import _ObjectDetectionTarget
 from maite_datasets.object_detection._coco import COCODatasetReader
-from maite_datasets._reader._factory import create_dataset_reader
+from maite_datasets._reader import create_dataset_reader
 from maite_datasets.object_detection._yolo import YOLODatasetReader
 
 
@@ -144,7 +143,7 @@ class TestBaseDatasetReader:
         assert hasattr(reader, "dataset_path")
         assert hasattr(reader, "dataset_id")
         assert hasattr(reader, "index2label")
-        assert hasattr(reader, "get_dataset")
+        assert hasattr(reader, "create_dataset")
         assert hasattr(reader, "validate_structure")
 
         # Test that get_dataset returns expected type
@@ -159,30 +158,6 @@ class TestBaseDatasetReader:
         assert "is_valid" in result
         assert "issues" in result
         assert "stats" in result
-
-
-class TestObjectDetectionTarget:
-    """Test the _ObjectDetectionTarget class."""
-
-    def test_initialization(self):
-        """Test target initialization."""
-        boxes = np.array([[10, 20, 30, 40], [50, 60, 70, 80]])
-        labels = np.array([0, 1])
-        scores = np.array([0.9, 0.8])
-
-        target = _ObjectDetectionTarget(boxes, labels, scores)
-
-        np.testing.assert_array_equal(target.boxes, boxes)
-        np.testing.assert_array_equal(target.labels, labels)
-        np.testing.assert_array_equal(target.scores, scores)
-
-    def test_array_conversion(self):
-        """Test automatic array conversion."""
-        target = _ObjectDetectionTarget([10, 20, 30, 40], [0], [1.0])
-
-        assert isinstance(target.boxes, np.ndarray)
-        assert isinstance(target.labels, np.ndarray)
-        assert isinstance(target.scores, np.ndarray)
 
 
 class TestCOCODatasetReader:

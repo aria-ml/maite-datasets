@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Generic, TypeVar
 
@@ -12,7 +12,7 @@ _logger = logging.getLogger(__name__)
 _TDataset = TypeVar("_TDataset", ImageClassificationDataset, ObjectDetectionDataset)
 
 
-class BaseDatasetReader(Generic[_TDataset]):
+class BaseDatasetReader(Generic[_TDataset], ABC):
     """
     Abstract base class for object detection dataset readers.
 
