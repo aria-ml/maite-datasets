@@ -10,11 +10,12 @@ from typing import Any
 import numpy as np
 from PIL import Image
 
+from maite_datasets._base import GenericObjectDetectionTarget
 from maite_datasets._protocols import DatasetMetadata, DatumMetadata, ObjectDetectionDataset, ObjectDetectionDatum
-from maite_datasets._reader._base import _ObjectDetectionTarget, BaseDatasetReader
+from maite_datasets._reader import BaseDatasetReader
 
 
-class YOLODatasetReader(BaseDatasetReader):
+class YOLODatasetReader(BaseDatasetReader[ObjectDetectionDataset]):
     """
     YOLO format dataset reader conforming to MAITE protocols.
 
@@ -120,7 +121,7 @@ class YOLODatasetReader(BaseDatasetReader):
         """Mapping from class index to class name."""
         return self._index2label
 
-    def _create_dataset_implementation(self) -> ObjectDetectionDataset:
+    def create_dataset(self) -> ObjectDetectionDataset:
         """Create YOLO dataset implementation."""
         return _YOLODataset(self)
 
@@ -233,7 +234,7 @@ class _YOLODataset:
         image_path = self.reader._image_files[index]
 
         # Load image
-        image = np.array(Image.open(image_path).convert("RGB"))
+        image = np.asarray(Image.open(image_path).convert("RGB"), dtype=np.uint8)
         img_height, img_width = image.shape[:2]
         image = np.transpose(image, (2, 0, 1))  # Convert to CHW format
 
@@ -292,7 +293,7 @@ class _YOLODataset:
             labels = np.empty(0, dtype=np.int64)
             scores = np.empty(0, dtype=np.float32)
 
-        target = _ObjectDetectionTarget(boxes, labels, scores)
+        target = GenericObjectDetectionTarget(boxes, labels, scores)
 
         # Create comprehensive datum metadata
         datum_metadata = DatumMetadata(

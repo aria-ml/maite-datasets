@@ -3,20 +3,18 @@
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 from PIL import Image
 
+from maite_datasets._base import GenericObjectDetectionTarget
 from maite_datasets._protocols import DatasetMetadata, DatumMetadata, ObjectDetectionDataset, ObjectDetectionDatum
-from maite_datasets._reader._base import _ObjectDetectionTarget, BaseDatasetReader
-
-_logger = logging.getLogger(__name__)
+from maite_datasets._reader import BaseDatasetReader
 
 
-class COCODatasetReader(BaseDatasetReader):
+class COCODatasetReader(BaseDatasetReader[ObjectDetectionDataset]):
     """
     COCO format dataset reader conforming to MAITE protocols.
 
@@ -132,7 +130,7 @@ class COCODatasetReader(BaseDatasetReader):
         """Mapping from class index to class name."""
         return self._index2label
 
-    def _create_dataset_implementation(self) -> ObjectDetectionDataset:
+    def create_dataset(self) -> ObjectDetectionDataset:
         """Create COCO dataset implementation."""
         return _COCODataset(self)
 
@@ -267,7 +265,7 @@ class _COCODataset:
             scores = np.empty(0, dtype=np.float32)
             annotation_metadata = []
 
-        target = _ObjectDetectionTarget(boxes, labels, scores)
+        target = GenericObjectDetectionTarget(boxes, labels, scores)
 
         # Create comprehensive datum metadata
         datum_metadata = DatumMetadata(

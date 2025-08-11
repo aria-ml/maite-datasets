@@ -12,16 +12,15 @@ from defusedxml.ElementTree import parse
 from numpy.typing import NDArray
 
 from maite_datasets._base import (
-    BaseDataset,
+    BaseDownloadedDataset,
     BaseODDataset,
     DataLocation,
+    GenericObjectDetectionTarget,
     _ensure_exists,
     _TArray,
-    _TTarget,
 )
 from maite_datasets._mixin._numpy import BaseDatasetNumpyMixin
 from maite_datasets._protocols import Transform
-from maite_datasets._types import ObjectDetectionTarget
 
 VOCClassStringMap = Literal[
     "aeroplane",
@@ -48,7 +47,7 @@ VOCClassStringMap = Literal[
 TVOCClassMap = TypeVar("TVOCClassMap", VOCClassStringMap, int, list[VOCClassStringMap], list[int])
 
 
-class BaseVOCDataset(BaseDataset[_TArray, _TTarget, list[str], str]):
+class BaseVOCDataset(BaseDownloadedDataset[_TArray, GenericObjectDetectionTarget[_TArray], list[str], str]):
     _resources = [
         DataLocation(
             url="https://data.brainchip.com/dataset-mirror/voc/VOCtrainval_11-May-2012.tar",
@@ -432,7 +431,7 @@ class BaseVOCDataset(BaseDataset[_TArray, _TTarget, list[str], str]):
 
 
 class VOCDetection(
-    BaseVOCDataset[NDArray[np.number[Any]], ObjectDetectionTarget[NDArray[np.number[Any]]]],
+    BaseVOCDataset[NDArray[np.number[Any]]],
     BaseODDataset[NDArray[np.number[Any]], list[str], str],
     BaseDatasetNumpyMixin,
 ):

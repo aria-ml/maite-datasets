@@ -3,22 +3,19 @@ from __future__ import annotations
 __all__ = []
 
 from abc import abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Generic, Iterator, Literal, NamedTuple, Sequence, TypeVar, cast
+from collections.abc import Iterator, Sequence
+from typing import Any, Generic, Literal, NamedTuple, TypeVar, cast
 
 import numpy as np
 
 from maite_datasets._fileio import _ensure_exists
-from maite_datasets._protocols import Array, Transform
-from maite_datasets._types import (
-    AnnotatedDataset,
-    DatasetMetadata,
-    DatumMetadata,
-    ImageClassificationDataset,
-    ObjectDetectionDataset,
-    ObjectDetectionTarget,
-)
+from maite_datasets._protocols import Array, DatasetMetadata, DatumMetadata, Transform
 
+
+_T = TypeVar("_T")
+_T_co = TypeVar("_T_co", covariant=True)
 _TArray = TypeVar("_TArray", bound=Array)
 _TTarget = TypeVar("_TTarget")
 _TRawTarget = TypeVar(
@@ -30,16 +27,18 @@ _TRawTarget = TypeVar(
 _TAnnotation = TypeVar("_TAnnotation", int, str, tuple[list[int], list[list[float]]])
 
 
-def _to_datum_metadata(index: int, metadata: dict[str, Any]) -> DatumMetadata:
-    _id = metadata.pop("id", index)
-    return DatumMetadata(id=_id, **metadata)
-
-
 class DataLocation(NamedTuple):
     url: str
     filename: str
     md5: bool
     checksum: str
+
+
+@dataclass
+class GenericObjectDetectionTarget(Generic[_TArray]):
+    boxes: _TArray
+    labels: _TArray
+    scores: _TArray
 
 
 class BaseDatasetMixin(Generic[_TArray]):
@@ -50,8 +49,21 @@ class BaseDatasetMixin(Generic[_TArray]):
     def _read_file(self, path: str) -> _TArray: ...
 
 
-class BaseDataset(
-    AnnotatedDataset[tuple[_TArray, _TTarget, DatumMetadata]],
+class Dataset(Generic[_T_co]):
+    """Abstract generic base class for PyTorch style Dataset"""
+
+    def __getitem__(self, index: int) -> _T_co: ...
+    def __add__(self, other: Dataset[_T_co]) -> Dataset[_T_co]: ...
+
+
+class BaseDataset(Dataset[_T]):
+    metadata: DatasetMetadata
+
+    def __len__(self) -> int: ...
+
+
+class BaseDownloadedDataset(
+    BaseDataset[tuple[_TArray, _TTarget, DatumMetadata]],
     Generic[_TArray, _TTarget, _TRawTarget, _TAnnotation],
 ):
     """
@@ -91,9 +103,11 @@ class BaseDataset(
         self._label2index = {v: k for k, v in self.index2label.items()}
 
         self.metadata: DatasetMetadata = DatasetMetadata(
-            id=self._unique_id(),
-            index2label=self.index2label,
-            split=self.image_set,
+            **{
+                "id": self._unique_id(),
+                "index2label": self.index2label,
+                "split": self.image_set,
+            }
         )
 
         # Load the data
@@ -154,14 +168,18 @@ class BaseDataset(
             image = transform(image)
         return image
 
+    def _to_datum_metadata(self, index: int, metadata: dict[str, Any]) -> DatumMetadata:
+        _id = metadata.pop("id", index)
+        return DatumMetadata(id=_id, **metadata)
+
     def __len__(self) -> int:
         return self.size
 
 
 class BaseICDataset(
-    BaseDataset[_TArray, _TArray, list[int], int],
+    BaseDownloadedDataset[_TArray, _TArray, list[int], int],
     BaseDatasetMixin[_TArray],
-    ImageClassificationDataset[_TArray],
+    BaseDataset[tuple[_TArray, _TArray, DatumMetadata]],
 ):
     """
     Base class for image classification datasets.
@@ -188,13 +206,13 @@ class BaseICDataset(
 
         img_metadata = {key: val[index] for key, val in self._datum_metadata.items()}
 
-        return img, score, _to_datum_metadata(index, img_metadata)
+        return img, score, self._to_datum_metadata(index, img_metadata)
 
 
 class BaseODDataset(
-    BaseDataset[_TArray, ObjectDetectionTarget[_TArray], _TRawTarget, _TAnnotation],
+    BaseDownloadedDataset[_TArray, GenericObjectDetectionTarget[_TArray], _TRawTarget, _TAnnotation],
     BaseDatasetMixin[_TArray],
-    ObjectDetectionDataset[_TArray],
+    BaseDataset[tuple[_TArray, GenericObjectDetectionTarget[_TArray], DatumMetadata]],
 ):
     """
     Base class for object detection datasets.
@@ -202,7 +220,7 @@ class BaseODDataset(
 
     _bboxes_per_size: bool = False
 
-    def __getitem__(self, index: int) -> tuple[_TArray, ObjectDetectionTarget[_TArray], DatumMetadata]:
+    def __getitem__(self, index: int) -> tuple[_TArray, GenericObjectDetectionTarget[_TArray], DatumMetadata]:
         """
         Args
         ----
@@ -223,14 +241,16 @@ class BaseODDataset(
         img = self._transform(img)
         # Adjust labels if necessary
         if self._bboxes_per_size and boxes:
-            boxes = boxes * np.array([[img_size[1], img_size[2], img_size[1], img_size[2]]])
+            boxes = boxes * np.asarray([[img_size[1], img_size[2], img_size[1], img_size[2]]])
         # Create the Object Detection Target
-        target = ObjectDetectionTarget(self._as_array(boxes), self._as_array(labels), self._one_hot_encode(labels))
+        target = GenericObjectDetectionTarget(
+            self._as_array(boxes), self._as_array(labels), self._one_hot_encode(labels)
+        )
 
         img_metadata = {key: val[index] for key, val in self._datum_metadata.items()}
         img_metadata = img_metadata | additional_metadata
 
-        return img, target, _to_datum_metadata(index, img_metadata)
+        return img, target, self._to_datum_metadata(index, img_metadata)
 
     @abstractmethod
     def _read_annotations(self, annotation: _TAnnotation) -> tuple[list[list[float]], list[int], dict[str, Any]]: ...

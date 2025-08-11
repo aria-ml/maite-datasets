@@ -9,10 +9,11 @@ import pytest
 from PIL import Image
 
 # Import the modules to test
-from maite_datasets._reader._base import BaseDatasetReader, _ObjectDetectionTarget
-from maite_datasets._reader._coco import COCODatasetReader
+from maite_datasets._reader import BaseDatasetReader
+from maite_datasets._reader._base import _ObjectDetectionTarget
+from maite_datasets.object_detection._coco import COCODatasetReader
 from maite_datasets._reader._factory import create_dataset_reader
-from maite_datasets._reader._yolo import YOLODatasetReader
+from maite_datasets.object_detection._yolo import YOLODatasetReader
 
 
 @pytest.fixture
@@ -147,7 +148,7 @@ class TestBaseDatasetReader:
         assert hasattr(reader, "validate_structure")
 
         # Test that get_dataset returns expected type
-        dataset = reader.get_dataset()
+        dataset = reader.create_dataset()
         assert hasattr(dataset, "metadata")
         assert hasattr(dataset, "__len__")
         assert hasattr(dataset, "__getitem__")
@@ -221,7 +222,7 @@ class TestCOCODatasetReader:
     def test_get_dataset(self, temp_coco_dataset):
         """Test dataset creation."""
         reader = COCODatasetReader(temp_coco_dataset)
-        dataset = reader.get_dataset()
+        dataset = reader.create_dataset()
 
         assert len(dataset) == 2
         assert dataset.metadata["id"] == temp_coco_dataset.name
@@ -230,7 +231,7 @@ class TestCOCODatasetReader:
     def test_dataset_getitem(self, temp_coco_dataset):
         """Test dataset item retrieval."""
         reader = COCODatasetReader(temp_coco_dataset)
-        dataset = reader.get_dataset()
+        dataset = reader.create_dataset()
 
         image, target, metadata = dataset[0]
 
@@ -279,7 +280,7 @@ class TestCOCODatasetReader:
         dummy_img.save(img_path)
 
         reader = COCODatasetReader(temp_coco_dataset)
-        dataset = reader.get_dataset()
+        dataset = reader.create_dataset()
 
         # Get item with no annotations (image2)
         image, target, metadata = dataset[1]
@@ -341,7 +342,7 @@ class TestYOLODatasetReader:
     def test_get_dataset(self, temp_yolo_dataset):
         """Test dataset creation."""
         reader = YOLODatasetReader(temp_yolo_dataset)
-        dataset = reader.get_dataset()
+        dataset = reader.create_dataset()
 
         assert len(dataset) == 2
         assert dataset.metadata["id"] == temp_yolo_dataset.name
@@ -350,7 +351,7 @@ class TestYOLODatasetReader:
     def test_dataset_getitem(self, temp_yolo_dataset):
         """Test dataset item retrieval."""
         reader = YOLODatasetReader(temp_yolo_dataset)
-        dataset = reader.get_dataset()
+        dataset = reader.create_dataset()
 
         image, target, metadata = dataset[0]
 
@@ -399,7 +400,7 @@ class TestYOLODatasetReader:
         label_file.unlink()
 
         reader = YOLODatasetReader(temp_yolo_dataset)
-        dataset = reader.get_dataset()
+        dataset = reader.create_dataset()
 
         # Get item with missing label file (should have empty annotations)
         image, target, metadata = dataset[1]  # image2

@@ -3,25 +3,17 @@ Common type protocols used for interoperability.
 """
 
 from collections.abc import Iterator
-import sys
 from typing import (
     Any,
     Generic,
     Protocol,
-    TypeAlias,
     TypedDict,
     TypeVar,
     runtime_checkable,
 )
 
 import numpy.typing
-from typing_extensions import NotRequired, ReadOnly, Required
-
-if sys.version_info >= (3, 10):
-    from typing import TypeAlias
-else:
-    from typing_extensions import TypeAlias
-
+from typing_extensions import NotRequired, ReadOnly, Required, TypeAlias
 
 ArrayLike: TypeAlias = numpy.typing.ArrayLike
 """
@@ -52,7 +44,6 @@ class Array(Protocol):
 
 _T = TypeVar("_T")
 _T_co = TypeVar("_T_co", covariant=True)
-_T_cn = TypeVar("_T_cn", contravariant=True)
 
 
 class DatasetMetadata(TypedDict, total=False):
@@ -87,24 +78,7 @@ class DatumMetadata(TypedDict, total=False):
 @runtime_checkable
 class Dataset(Generic[_T_co], Protocol):
     """
-    Protocol for a generic `Dataset`.
-
-    Methods
-    -------
-    __getitem__(index: int)
-        Returns datum at specified index.
-    __len__()
-        Returns dataset length.
-    """
-
-    def __getitem__(self, index: int, /) -> _T_co: ...
-    def __len__(self) -> int: ...
-
-
-@runtime_checkable
-class AnnotatedDataset(Dataset[_T_co], Generic[_T_co], Protocol):
-    """
-    Protocol for a generic `AnnotatedDataset`.
+    Protocol for a MAITE compliant `Dataset`.
 
     Attributes
     ----------
@@ -125,6 +99,9 @@ class AnnotatedDataset(Dataset[_T_co], Generic[_T_co], Protocol):
     @property
     def metadata(self) -> DatasetMetadata: ...
 
+    def __getitem__(self, index: int, /) -> _T_co: ...
+    def __len__(self) -> int: ...
+
 
 # ========== IMAGE CLASSIFICATION DATASETS ==========
 
@@ -139,7 +116,7 @@ Type alias for an image classification datum tuple.
 """
 
 
-ImageClassificationDataset: TypeAlias = AnnotatedDataset[ImageClassificationDatum]
+ImageClassificationDataset: TypeAlias = Dataset[ImageClassificationDatum]
 """
 Type alias for an :class:`AnnotatedDataset` of :class:`ImageClassificationDatum` elements.
 """
@@ -179,7 +156,7 @@ Type alias for an object detection datum tuple.
 """
 
 
-ObjectDetectionDataset: TypeAlias = AnnotatedDataset[ObjectDetectionDatum]
+ObjectDetectionDataset: TypeAlias = Dataset[ObjectDetectionDatum]
 """
 Type alias for an :class:`AnnotatedDataset` of :class:`ObjectDetectionDatum` elements.
 """

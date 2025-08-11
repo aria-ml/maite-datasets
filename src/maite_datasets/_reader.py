@@ -1,39 +1,18 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 import logging
+from abc import abstractmethod
 from pathlib import Path
-from typing import Any
+from typing import Any, Generic, TypeVar
 
-import numpy as np
-
-from maite_datasets._protocols import ArrayLike, ObjectDetectionDataset
+from maite_datasets._protocols import ImageClassificationDataset, ObjectDetectionDataset
 
 _logger = logging.getLogger(__name__)
 
-
-class _ObjectDetectionTarget:
-    """Internal implementation of ObjectDetectionTarget protocol."""
-
-    def __init__(self, boxes: ArrayLike, labels: ArrayLike, scores: ArrayLike) -> None:
-        self._boxes = np.asarray(boxes)
-        self._labels = np.asarray(labels)
-        self._scores = np.asarray(scores)
-
-    @property
-    def boxes(self) -> ArrayLike:
-        return self._boxes
-
-    @property
-    def labels(self) -> ArrayLike:
-        return self._labels
-
-    @property
-    def scores(self) -> ArrayLike:
-        return self._scores
+_TDataset = TypeVar("_TDataset", ImageClassificationDataset, ObjectDetectionDataset)
 
 
-class BaseDatasetReader(ABC):
+class BaseDatasetReader(Generic[_TDataset]):
     """
     Abstract base class for object detection dataset readers.
 
@@ -65,7 +44,7 @@ class BaseDatasetReader(ABC):
         pass
 
     @abstractmethod
-    def _create_dataset_implementation(self) -> ObjectDetectionDataset:
+    def create_dataset(self) -> _TDataset:
         """Create the format-specific dataset implementation."""
         pass
 
@@ -123,13 +102,61 @@ class BaseDatasetReader(ABC):
 
         return {"is_valid": len(issues) == 0, "issues": issues, "stats": stats}
 
-    def get_dataset(self) -> ObjectDetectionDataset:
-        """
-        Get dataset conforming to MAITE ObjectDetectionDataset protocol.
 
-        Returns
-        -------
-        ObjectDetectionDataset
-            Dataset instance with MAITE-compatible interface
-        """
-        return self._create_dataset_implementation()
+def create_dataset_reader(
+    dataset_path: str | Path, format_hint: str | None = None
+) -> BaseDatasetReader[ImageClassificationDataset] | BaseDatasetReader[ObjectDetectionDataset]:
+    """
+    Factory function to create appropriate dataset reader based on directory structure.
+
+    Parameters
+    ----------
+    dataset_path : str or Path
+        Root directory containing dataset files
+    format_hint : str or None, default None
+        Format hint ("coco" or "yolo"). If None, auto-detects based on file structure
+
+    Returns
+    -------
+    BaseDatasetReader
+        Appropriate reader instance for the detected format
+
+    Raises
+    ------
+    ValueError
+        If format cannot be determined or is unsupported
+    """
+    from maite_datasets.object_detection._coco import COCODatasetReader
+    from maite_datasets.object_detection._yolo import YOLODatasetReader
+
+    dataset_path = Path(dataset_path)
+
+    if format_hint:
+        format_hint = format_hint.lower()
+        if format_hint == "coco":
+            return COCODatasetReader(dataset_path)
+        elif format_hint == "yolo":
+            return YOLODatasetReader(dataset_path)
+        else:
+            raise ValueError(f"Unsupported format hint: {format_hint}")
+
+    # Auto-detect format
+    has_annotations_json = (dataset_path / "annotations.json").exists()
+    has_labels_dir = (dataset_path / "labels").exists()
+
+    if has_annotations_json and not has_labels_dir:
+        _logger.info(f"Detected COCO format for {dataset_path}")
+        return COCODatasetReader(dataset_path)
+    elif has_labels_dir and not has_annotations_json:
+        _logger.info(f"Detected YOLO format for {dataset_path}")
+        return YOLODatasetReader(dataset_path)
+    elif has_annotations_json and has_labels_dir:
+        raise ValueError(
+            f"Ambiguous format in {dataset_path}: both annotations.json and labels/ exist. "
+            "Use format_hint parameter to specify format."
+        )
+    else:
+        raise ValueError(
+            f"Cannot detect dataset format in {dataset_path}. "
+            "Expected either annotations.json (COCO) or labels/ directory (YOLO)."
+        )
