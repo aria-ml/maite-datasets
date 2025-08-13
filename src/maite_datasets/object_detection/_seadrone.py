@@ -10,9 +10,8 @@ from typing import Any, Literal
 import numpy as np
 from numpy.typing import NDArray
 
-from maite_datasets._base import BaseODDataset, DataLocation
+from maite_datasets._base import BaseDatasetNumpyMixin, BaseODDataset, DataLocation
 from maite_datasets._fileio import _ensure_exists
-from maite_datasets._mixin._numpy import BaseDatasetNumpyMixin
 from maite_datasets._protocols import Transform
 
 

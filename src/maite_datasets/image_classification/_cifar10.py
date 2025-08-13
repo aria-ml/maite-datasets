@@ -9,8 +9,7 @@ from typing import Any, Literal, TypeVar
 import numpy as np
 from numpy.typing import NDArray
 
-from maite_datasets._base import BaseICDataset, DataLocation
-from maite_datasets._mixin._numpy import BaseDatasetNumpyMixin
+from maite_datasets._base import BaseDatasetNumpyMixin, BaseICDataset, DataLocation
 from maite_datasets._protocols import Transform
 
 CIFARClassStringMap = Literal[

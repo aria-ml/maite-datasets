@@ -13,6 +13,7 @@ from defusedxml.ElementTree import parse
 from numpy.typing import NDArray
 
 from maite_datasets._base import (
+    BaseDatasetNumpyMixin,
     BaseDownloadedDataset,
     BaseODDataset,
     DataLocation,
@@ -20,7 +21,6 @@ from maite_datasets._base import (
     _ensure_exists,
     _TArray,
 )
-from maite_datasets._mixin._numpy import BaseDatasetNumpyMixin
 from maite_datasets._protocols import Transform
 
 VOCClassStringMap = Literal[
