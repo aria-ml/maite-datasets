@@ -15,10 +15,3 @@ __all__ = [
     "COCODatasetReader",
     "YOLODatasetReader",
 ]
-
-import importlib.util
-
-if importlib.util.find_spec("torch") is not None:
-    from maite_datasets.object_detection._voc_torch import VOCDetectionTorch
-
-    __all__ += ["VOCDetectionTorch"]
