@@ -2,8 +2,9 @@ from __future__ import annotations
 
 __all__ = []
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Literal, Sequence, TypeVar
+from typing import Any, Literal, TypeVar
 
 import numpy as np
 from numpy.typing import NDArray

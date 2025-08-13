@@ -3,16 +3,15 @@ from __future__ import annotations
 __all__ = []
 
 from abc import abstractmethod
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from collections.abc import Iterator, Sequence
 from typing import Any, Generic, Literal, NamedTuple, TypeVar, cast
 
 import numpy as np
 
 from maite_datasets._fileio import _ensure_exists
 from maite_datasets._protocols import Array, DatasetMetadata, DatumMetadata, Transform
-
 
 _T = TypeVar("_T")
 _T_co = TypeVar("_T_co", covariant=True)

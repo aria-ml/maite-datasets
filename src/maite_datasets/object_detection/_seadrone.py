@@ -3,8 +3,9 @@ from __future__ import annotations
 __all__ = []
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Literal, Sequence
+from typing import Any, Literal
 
 import numpy as np
 from numpy.typing import NDArray

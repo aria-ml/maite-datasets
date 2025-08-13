@@ -7,7 +7,7 @@ from __future__ import annotations
 __all__ = []
 
 from collections.abc import Iterable, Sequence
-from typing import Any, TypeVar, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import numpy as np
 from numpy.typing import NDArray

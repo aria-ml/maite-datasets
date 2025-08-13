@@ -201,7 +201,7 @@ class YOLODatasetReader(BaseDatasetReader[ObjectDetectionDataset]):
         """Load class names from classes file."""
         with open(self._classes_path) as f:
             class_names = [line.strip() for line in f if line.strip()]
-        self._index2label = {idx: name for idx, name in enumerate(class_names)}
+        self._index2label = dict(enumerate(class_names))
 
     def _find_image_files(self) -> None:
         """Find all valid image files."""

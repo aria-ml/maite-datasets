@@ -9,9 +9,8 @@ import pytest
 from PIL import Image
 
 # Import the modules to test
-from maite_datasets._reader import BaseDatasetReader
+from maite_datasets._reader import BaseDatasetReader, create_dataset_reader
 from maite_datasets.object_detection._coco import COCODatasetReader
-from maite_datasets._reader import create_dataset_reader
 from maite_datasets.object_detection._yolo import YOLODatasetReader
 
 

@@ -196,7 +196,7 @@ class COCODatasetReader(BaseDatasetReader[ObjectDetectionDataset]):
         else:
             class_names = [cat["name"] for cat in self._coco_data["categories"]]
 
-        self._index2label = {idx: name for idx, name in enumerate(class_names)}
+        self._index2label = dict(enumerate(class_names))
 
 
 class COCODataset(BaseDataset):

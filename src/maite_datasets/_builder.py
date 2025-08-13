@@ -4,12 +4,11 @@ import numpy as np
 
 __all__ = []
 
+from collections.abc import Iterable, Sequence
 from typing import (
     Any,
     Generic,
-    Iterable,
     Literal,
-    Sequence,
     SupportsFloat,
     SupportsInt,
     TypeVar,
@@ -20,9 +19,9 @@ from maite_datasets._protocols import (
     Array,
     ArrayLike,
     DatasetMetadata,
+    DatumMetadata,
     ImageClassificationDataset,
     ObjectDetectionDataset,
-    DatumMetadata,
 )
 
 

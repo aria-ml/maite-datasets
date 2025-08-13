@@ -1,9 +1,9 @@
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import pytest
 from numpy.typing import NDArray
-from typing import Any
 
 from maite_datasets._validate import (
     ValidationMessages,

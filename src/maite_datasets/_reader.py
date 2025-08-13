@@ -135,10 +135,9 @@ def create_dataset_reader(
         format_hint = format_hint.lower()
         if format_hint == "coco":
             return COCODatasetReader(dataset_path)
-        elif format_hint == "yolo":
+        if format_hint == "yolo":
             return YOLODatasetReader(dataset_path)
-        else:
-            raise ValueError(f"Unsupported format hint: {format_hint}")
+        raise ValueError(f"Unsupported format hint: {format_hint}")
 
     # Auto-detect format
     has_annotations_json = (dataset_path / "annotations.json").exists()
@@ -147,16 +146,15 @@ def create_dataset_reader(
     if has_annotations_json and not has_labels_dir:
         _logger.info(f"Detected COCO format for {dataset_path}")
         return COCODatasetReader(dataset_path)
-    elif has_labels_dir and not has_annotations_json:
+    if has_labels_dir and not has_annotations_json:
         _logger.info(f"Detected YOLO format for {dataset_path}")
         return YOLODatasetReader(dataset_path)
-    elif has_annotations_json and has_labels_dir:
+    if has_annotations_json and has_labels_dir:
         raise ValueError(
             f"Ambiguous format in {dataset_path}: both annotations.json and labels/ exist. "
             "Use format_hint parameter to specify format."
         )
-    else:
-        raise ValueError(
-            f"Cannot detect dataset format in {dataset_path}. "
-            "Expected either annotations.json (COCO) or labels/ directory (YOLO)."
-        )
+    raise ValueError(
+        f"Cannot detect dataset format in {dataset_path}. "
+        "Expected either annotations.json (COCO) or labels/ directory (YOLO)."
+    )

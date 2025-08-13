@@ -4,8 +4,9 @@ __all__ = []
 
 import os
 import shutil
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Literal, Sequence, TypeVar
+from typing import Any, Literal, TypeVar
 
 import numpy as np
 from defusedxml.ElementTree import parse

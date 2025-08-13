@@ -2,9 +2,10 @@ from __future__ import annotations
 
 __all__ = []
 
-import numpy as np
 from collections.abc import Sequence, Sized
 from typing import Any, Literal
+
+import numpy as np
 
 from maite_datasets._protocols import Array, ObjectDetectionTarget
 
