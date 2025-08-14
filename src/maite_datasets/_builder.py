@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import numpy as np
-
 __all__ = []
 
 from collections.abc import Iterable, Sequence
@@ -14,6 +12,8 @@ from typing import (
     TypeVar,
     cast,
 )
+
+import numpy as np
 
 from maite_datasets._protocols import (
     Array,

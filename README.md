@@ -16,7 +16,7 @@ For status bar indicators when downloading, you can include the extra `tqdm` whe
 pip install maite-datasets[tqdm]
 ```
 
-## Available Datasets
+## Available Downloadable Datasets
 
 | Task           | Dataset          | Description                                                         |
 |----------------|------------------|---------------------------------------------------------------------|
@@ -28,7 +28,7 @@ pip install maite-datasets[tqdm]
 | Detection      | Seadrone         | A UAV dataset focused on open water object detection.               |
 | Detection      | VOCDetection     | [Pascal VOC](http://host.robots.ox.ac.uk/pascal/VOC/) dataset.      |
 
-## Usage
+### Usage
 
 Here is an example of how to import MNIST for usage with your workflow.
 
@@ -48,6 +48,58 @@ MNIST Dataset
 
 >>> print("tuple("+", ".join([str(type(t)) for t in mnist[0]])+")")
 tuple(<class 'numpy.ndarray'>, <class 'numpy.ndarray'>, <class 'dict'>)
+```
+
+## Dataset Wrappers
+
+Wrappers provide a way to convert datasets to allow usage of tools within specific backend frameworks.
+
+`TorchWrapper` is a convenience class that wraps any of the datasets and provides the capability to apply
+`torchvision` transforms to the dataset.
+
+**NOTE:** `TorchWrapper` requires _torch_ and _torchvision_ to be installed.
+
+```python
+>>> from maite_datasets.object_detection import MILCO
+
+>>> milco = MILCO(root="data", download=True)
+>>> print(milco)
+MILCO Dataset
+-------------
+    Transforms: []
+    Image Set: train
+    Metadata: {'id': 'MILCO_train', 'index2label': {0: 'MILCO', 1: 'NOMBO'}, 'split': 'train'}
+    Path: /home/user/maite-datasets/data/milco
+    Size: 261
+
+>>> print(f"type={milco[0][0].__class__.__name__}, shape={milco[0][0].shape}")
+type=ndarray, shape=(3, 1024, 1024)
+
+>>> print(milco[0][1].boxes[0])
+[ 75. 217. 130. 247.]
+
+>>> from maite_datasets.wrappers import TorchWrapper
+>>> from torchvision.transforms.v2 import Resize
+
+>>> milco_torch = TorchWrapper(milco, transforms=Resize(224))
+>>> print(milco_torch)
+Torch Wrapped MILCO Dataset
+---------------------------
+    Transforms: Resize(size=[224], interpolation=InterpolationMode.BILINEAR, antialias=True)
+
+MILCO Dataset
+-------------
+    Transforms: []
+    Image Set: train
+    Metadata: {'id': 'MILCO_train', 'index2label': {0: 'MILCO', 1: 'NOMBO'}, 'split': 'train'}
+    Path: /home/user/maite-datasets/data/milco
+    Size: 261
+
+>>> print(f"type={milco_torch[0][0].__class__.__name__}, shape={milco_torch[0][0].shape}")
+type=Image, shape=torch.Size([3, 224, 224])
+
+>>> print(milco_torch[0][1].boxes[0])
+tensor([16.4062, 47.4688, 28.4375, 54.0312], dtype=torch.float64)
 ```
 
 ## Additional Information

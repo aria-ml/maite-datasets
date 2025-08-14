@@ -38,6 +38,8 @@ tqdm = [
 base = [
   "nox[uv]>=2025.5.1",
   "torch>=2.2.0",
+  "torchvision>=0.17.0",
+  "tqdm>=4.66",
   "uv>=0.8.0",
 ]
 lint = [
@@ -64,6 +66,7 @@ dev = [
 
 [tool.uv.sources]
 torch = [{ index = "pytorch-cpu" }]
+torchvision = [{ index = "pytorch-cpu" }]
 
 [[tool.uv.index]]
 name = "pytorch-cpu"
