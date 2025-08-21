@@ -6,15 +6,16 @@ import json
 from pathlib import Path
 from typing import Any
 
+import maite.protocols.object_detection as od
 import numpy as np
+from maite.protocols import DatasetMetadata, DatumMetadata
 from PIL import Image
 
 from maite_datasets._base import BaseDataset, GenericObjectDetectionTarget
-from maite_datasets._protocols import DatasetMetadata, DatumMetadata, ObjectDetectionDataset, ObjectDetectionDatum
 from maite_datasets._reader import BaseDatasetReader
 
 
-class COCODatasetReader(BaseDatasetReader[ObjectDetectionDataset]):
+class COCODatasetReader(BaseDatasetReader[od.Dataset]):
     """
     COCO format dataset reader conforming to MAITE protocols.
 
@@ -130,7 +131,7 @@ class COCODatasetReader(BaseDatasetReader[ObjectDetectionDataset]):
         """Mapping from class index to class name."""
         return self._index2label
 
-    def create_dataset(self) -> ObjectDetectionDataset:
+    def create_dataset(self) -> od.Dataset:
         """Create COCO dataset implementation."""
         return COCODataset(self)
 
@@ -219,7 +220,7 @@ class COCODataset(BaseDataset):
     def __len__(self) -> int:
         return len(self._image_ids)
 
-    def __getitem__(self, index: int) -> ObjectDetectionDatum:
+    def __getitem__(self, index: int) -> tuple[od.InputType, od.ObjectDetectionTarget, DatumMetadata]:
         image_id = self._image_ids[index]
         image_info = self._reader._image_id_to_info[image_id]
 

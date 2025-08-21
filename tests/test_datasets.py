@@ -2,9 +2,9 @@ import hashlib
 
 import numpy as np
 import pytest
+from maite.protocols.object_detection import ObjectDetectionTarget
 
 from maite_datasets._base import DataLocation
-from maite_datasets._protocols import ObjectDetectionTarget
 from maite_datasets.image_classification._cifar10 import CIFAR10
 from maite_datasets.image_classification._mnist import MNIST
 from maite_datasets.image_classification._ships import Ships

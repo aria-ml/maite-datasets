@@ -15,3 +15,4 @@ wheels/
 # Test output
 .nox/
 output/
+.coverage

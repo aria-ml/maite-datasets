@@ -5,11 +5,12 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Generic, TypeVar
 
-from maite_datasets._protocols import ImageClassificationDataset, ObjectDetectionDataset
+import maite.protocols.image_classification as ic
+import maite.protocols.object_detection as od
 
 _logger = logging.getLogger(__name__)
 
-_TDataset = TypeVar("_TDataset", ImageClassificationDataset, ObjectDetectionDataset)
+_TDataset = TypeVar("_TDataset", ic.Dataset, od.Dataset)
 
 
 class BaseDatasetReader(Generic[_TDataset], ABC):
@@ -105,7 +106,7 @@ class BaseDatasetReader(Generic[_TDataset], ABC):
 
 def create_dataset_reader(
     dataset_path: str | Path, format_hint: str | None = None
-) -> BaseDatasetReader[ImageClassificationDataset] | BaseDatasetReader[ObjectDetectionDataset]:
+) -> BaseDatasetReader[ic.Dataset] | BaseDatasetReader[od.Dataset]:
     """
     Factory function to create appropriate dataset reader based on directory structure.
 

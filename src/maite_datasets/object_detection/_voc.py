@@ -8,9 +8,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Literal, TypeVar
 
-import numpy as np
 from defusedxml.ElementTree import parse
-from numpy.typing import NDArray
 
 from maite_datasets._base import (
     BaseDatasetNumpyMixin,
@@ -18,10 +16,10 @@ from maite_datasets._base import (
     BaseODDataset,
     DataLocation,
     GenericObjectDetectionTarget,
+    NumpyArray,
+    NumpyObjectDetectionTransform,
     _ensure_exists,
-    _TArray,
 )
-from maite_datasets._protocols import Transform
 
 VOCClassStringMap = Literal[
     "aeroplane",
@@ -48,7 +46,7 @@ VOCClassStringMap = Literal[
 TVOCClassMap = TypeVar("TVOCClassMap", VOCClassStringMap, int, list[VOCClassStringMap], list[int])
 
 
-class BaseVOCDataset(BaseDownloadedDataset[_TArray, GenericObjectDetectionTarget[_TArray], list[str], str]):
+class BaseVOCDataset(BaseDownloadedDataset[NumpyArray, GenericObjectDetectionTarget[NumpyArray], list[str], str]):
     _resources = [
         DataLocation(
             url="https://data.brainchip.com/dataset-mirror/voc/VOCtrainval_11-May-2012.tar",
@@ -130,7 +128,7 @@ class BaseVOCDataset(BaseDownloadedDataset[_TArray, GenericObjectDetectionTarget
         root: str | Path,
         image_set: Literal["train", "val", "test", "base"] = "train",
         year: Literal["2007", "2008", "2009", "2010", "2011", "2012"] = "2012",
-        transforms: Transform[_TArray] | Sequence[Transform[_TArray]] | None = None,
+        transforms: NumpyObjectDetectionTransform | Sequence[NumpyObjectDetectionTransform] | None = None,
         download: bool = False,
         verbose: bool = False,
     ) -> None:
@@ -432,8 +430,8 @@ class BaseVOCDataset(BaseDownloadedDataset[_TArray, GenericObjectDetectionTarget
 
 
 class VOCDetection(
-    BaseVOCDataset[NDArray[np.number[Any]]],
-    BaseODDataset[NDArray[np.number[Any]], list[str], str],
+    BaseVOCDataset,
+    BaseODDataset[NumpyArray, list[str], str],
     BaseDatasetNumpyMixin,
 ):
     """

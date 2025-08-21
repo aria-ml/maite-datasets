@@ -4,10 +4,12 @@ from typing import Any, Callable, Generic, TypeVar, overload
 
 import numpy as np
 import torch
+from maite.protocols import DatasetMetadata, DatumMetadata
+from maite.protocols.object_detection import ObjectDetectionTarget
 from torchvision.tv_tensors import BoundingBoxes, Image
 
 from maite_datasets._base import BaseDataset, GenericObjectDetectionTarget
-from maite_datasets._protocols import Array, DatasetMetadata, DatumMetadata, ObjectDetectionTarget
+from maite_datasets.protocols import Array
 
 T = TypeVar("T")
 TArray = TypeVar("TArray", bound=Array)
@@ -30,7 +32,7 @@ class TorchWrapper(Generic[TArray, TTarget]):
 
     def __init__(
         self,
-        dataset: BaseDataset[tuple[TArray, TTarget, DatumMetadata]],
+        dataset: BaseDataset[TArray, TTarget],
         transforms: Callable[[Any], Any] | None = None,
     ) -> None:
         self._dataset = dataset

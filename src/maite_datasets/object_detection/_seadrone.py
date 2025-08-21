@@ -7,17 +7,19 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Literal
 
-import numpy as np
-from numpy.typing import NDArray
-
-from maite_datasets._base import BaseDatasetNumpyMixin, BaseODDataset, DataLocation
+from maite_datasets._base import (
+    BaseDatasetNumpyMixin,
+    BaseODDataset,
+    DataLocation,
+    NumpyArray,
+    NumpyObjectDetectionTransform,
+)
 from maite_datasets._fileio import _ensure_exists
-from maite_datasets._protocols import Transform
 
 
 class SeaDrone(
     BaseODDataset[
-        NDArray[np.number[Any]],
+        NumpyArray,
         list[tuple[list[int], list[list[float]]]],
         tuple[list[int], list[list[float]]],
     ],
@@ -313,7 +315,7 @@ class SeaDrone(
         self,
         root: str | Path,
         image_set: Literal["train", "val", "test", "base"] = "train",
-        transforms: Transform[NDArray[np.number[Any]]] | Sequence[Transform[NDArray[np.number[Any]]]] | None = None,
+        transforms: NumpyObjectDetectionTransform | Sequence[NumpyObjectDetectionTransform] | None = None,
         download: bool = False,
         verbose: bool = False,
     ) -> None:

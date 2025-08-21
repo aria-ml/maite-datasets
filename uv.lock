@@ -643,10 +643,26 @@ wheels = [
 ]
 
 [[package]]
+name = "maite"
+version = "0.8.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy", version = "2.0.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.10.*'" },
+    { name = "numpy", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/23/83/65fece91c7ac59e5e1120f0a3fc04ef814ae1ed382804eef146f372a1454/maite-0.8.2.tar.gz", hash = "sha256:eefe1cbb86de96de4bbccbddd74f11daf8b61f5033b198ba1fb67b57878ad5ac", size = 82439, upload-time = "2025-07-31T15:47:35.854Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/18/f5/e8c1dee1d30ce22a037ce7fc5659f3c77ef3d3790bc2cc91ddb1a6397947/maite-0.8.2-py3-none-any.whl", hash = "sha256:aed312e5e0cd04eac7042d4367ed26882562e37ad21fa21ec11af65e993d9ed1", size = 81572, upload-time = "2025-07-31T15:47:34.341Z" },
+]
+
+[[package]]
 name = "maite-datasets"
 source = { editable = "." }
 dependencies = [
     { name = "defusedxml" },
+    { name = "maite" },
     { name = "numpy", version = "2.0.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.10.*'" },
     { name = "numpy", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
@@ -716,6 +732,7 @@ type = [
 [package.metadata]
 requires-dist = [
     { name = "defusedxml", specifier = ">=0.7.1" },
+    { name = "maite", specifier = ">=0.7,<0.9" },
     { name = "numpy", specifier = ">=1.24.2" },
     { name = "pillow", specifier = ">=10.3.0" },
     { name = "requests", specifier = ">=2.32.3" },

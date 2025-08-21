@@ -6,8 +6,9 @@ from collections.abc import Sequence, Sized
 from typing import Any, Literal
 
 import numpy as np
+from maite.protocols.object_detection import ObjectDetectionTarget
 
-from maite_datasets._protocols import Array, ObjectDetectionTarget
+from maite_datasets.protocols import Array
 
 
 class ValidationMessages:

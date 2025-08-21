@@ -13,16 +13,12 @@ from typing import (
     cast,
 )
 
+import maite.protocols.image_classification as ic
+import maite.protocols.object_detection as od
 import numpy as np
+from maite.protocols import ArrayLike, DatasetMetadata, DatumMetadata
 
-from maite_datasets._protocols import (
-    Array,
-    ArrayLike,
-    DatasetMetadata,
-    DatumMetadata,
-    ImageClassificationDataset,
-    ObjectDetectionDataset,
-)
+from maite_datasets.protocols import Array
 
 
 def _ensure_id(index: int, metadata: dict[str, Any]) -> DatumMetadata:
@@ -96,6 +92,8 @@ _TLabels = TypeVar("_TLabels", Sequence[int], Sequence[Sequence[int]])
 
 
 class BaseAnnotatedDataset(Generic[_TLabels]):
+    metadata: DatasetMetadata
+
     def __init__(
         self,
         datum_type: Literal["ic", "od"],
@@ -111,16 +109,13 @@ class BaseAnnotatedDataset(Generic[_TLabels]):
         self._labels = labels
         self._metadata = metadata
         self._id = name or f"{len(self._images)}_image_{len(self._index2label)}_class_{datum_type}_dataset"
-
-    @property
-    def metadata(self) -> DatasetMetadata:
-        return DatasetMetadata(id=self._id, index2label=self._index2label)
+        self.metadata = DatasetMetadata(id=self._id, index2label=self._index2label)
 
     def __len__(self) -> int:
         return len(self._images)
 
 
-class CustomImageClassificationDataset(BaseAnnotatedDataset[Sequence[int]], ImageClassificationDataset):
+class CustomImageClassificationDataset(BaseAnnotatedDataset[Sequence[int]], ic.Dataset):
     def __init__(
         self,
         images: Array | Sequence[Array],
@@ -151,33 +146,34 @@ class CustomImageClassificationDataset(BaseAnnotatedDataset[Sequence[int]], Imag
         )
 
 
-class CustomObjectDetectionDataset(BaseAnnotatedDataset[Sequence[Sequence[int]]], ObjectDetectionDataset):
-    class ObjectDetectionTarget:
-        def __init__(
-            self,
-            labels: Sequence[int],
-            bboxes: Sequence[Sequence[float]],
-            class_count: int,
-        ) -> None:
-            self._labels = labels
-            self._bboxes = bboxes
-            one_hot = [[0.0] * class_count] * len(labels)
-            for i, label in enumerate(labels):
-                one_hot[i][label] = 1.0
-            self._scores = one_hot
+class CustomObjectDetectionTarget:
+    def __init__(
+        self,
+        labels: Sequence[int],
+        bboxes: Sequence[Sequence[float]],
+        class_count: int,
+    ) -> None:
+        self._labels = labels
+        self._bboxes = bboxes
+        one_hot = [[0.0] * class_count] * len(labels)
+        for i, label in enumerate(labels):
+            one_hot[i][label] = 1.0
+        self._scores = one_hot
 
-        @property
-        def labels(self) -> Sequence[int]:
-            return self._labels
+    @property
+    def labels(self) -> Sequence[int]:
+        return self._labels
 
-        @property
-        def boxes(self) -> Sequence[Sequence[float]]:
-            return self._bboxes
+    @property
+    def boxes(self) -> Sequence[Sequence[float]]:
+        return self._bboxes
 
-        @property
-        def scores(self) -> Sequence[Sequence[float]]:
-            return self._scores
+    @property
+    def scores(self) -> Sequence[Sequence[float]]:
+        return self._scores
 
+
+class CustomObjectDetectionDataset(BaseAnnotatedDataset[Sequence[Sequence[int]]], od.Dataset):
     def __init__(
         self,
         images: Array | Sequence[Array],
@@ -202,14 +198,10 @@ class CustomObjectDetectionDataset(BaseAnnotatedDataset[Sequence[Sequence[int]]]
             [np.asarray(box).tolist() if isinstance(box, Array) else box for box in bbox] for bbox in bboxes
         ]
 
-    @property
-    def metadata(self) -> DatasetMetadata:
-        return DatasetMetadata(id=self._id, index2label=self._index2label)
-
-    def __getitem__(self, idx: int, /) -> tuple[Array, ObjectDetectionTarget, DatumMetadata]:
+    def __getitem__(self, idx: int, /) -> tuple[Array, CustomObjectDetectionTarget, DatumMetadata]:
         return (
             self._images[idx],
-            self.ObjectDetectionTarget(self._labels[idx], self._bboxes[idx], len(self._classes)),
+            CustomObjectDetectionTarget(self._labels[idx], self._bboxes[idx], len(self._classes)),
             _ensure_id(idx, self._metadata[idx] if self._metadata is not None else {}),
         )
 
@@ -220,9 +212,9 @@ def to_image_classification_dataset(
     metadata: Sequence[dict[str, Any]] | dict[str, Sequence[Any]] | None,
     classes: Sequence[str] | None,
     name: str | None = None,
-) -> ImageClassificationDataset:
+) -> ic.Dataset:
     """
-    Helper function to create custom ImageClassificationDataset classes.
+    Helper function to create custom image classification Dataset classes.
 
     Parameters
     ----------
@@ -237,7 +229,7 @@ def to_image_classification_dataset(
 
     Returns
     -------
-    ImageClassificationDataset
+    Dataset
     """
     _validate_data("ic", images, labels, None, metadata)
     return CustomImageClassificationDataset(images, labels, _listify_metadata(metadata), classes, name)
@@ -250,9 +242,9 @@ def to_object_detection_dataset(
     metadata: Sequence[dict[str, Any]] | dict[str, Sequence[Any]] | None,
     classes: Sequence[str] | None,
     name: str | None = None,
-) -> ObjectDetectionDataset:
+) -> od.Dataset:
     """
-    Helper function to create custom ObjectDetectionDataset classes.
+    Helper function to create custom object detection Dataset classes.
 
     Parameters
     ----------
@@ -269,7 +261,7 @@ def to_object_detection_dataset(
 
     Returns
     -------
-    ObjectDetectionDataset
+    Dataset
     """
     _validate_data("od", images, labels, bboxes, metadata)
     return CustomObjectDetectionDataset(images, labels, bboxes, _listify_metadata(metadata), classes, name)

@@ -7,15 +7,16 @@ __all__ = []
 from pathlib import Path
 from typing import Any
 
+import maite.protocols.object_detection as od
 import numpy as np
+from maite.protocols import DatasetMetadata, DatumMetadata
 from PIL import Image
 
 from maite_datasets._base import BaseDataset, GenericObjectDetectionTarget
-from maite_datasets._protocols import DatasetMetadata, DatumMetadata, ObjectDetectionDataset, ObjectDetectionDatum
 from maite_datasets._reader import BaseDatasetReader
 
 
-class YOLODatasetReader(BaseDatasetReader[ObjectDetectionDataset]):
+class YOLODatasetReader(BaseDatasetReader[od.Dataset]):
     """
     YOLO format dataset reader conforming to MAITE protocols.
 
@@ -121,7 +122,7 @@ class YOLODatasetReader(BaseDatasetReader[ObjectDetectionDataset]):
         """Mapping from class index to class name."""
         return self._index2label
 
-    def create_dataset(self) -> ObjectDetectionDataset:
+    def create_dataset(self) -> od.Dataset:
         """Create YOLO dataset implementation."""
         return YOLODataset(self)
 
@@ -233,7 +234,7 @@ class YOLODataset(BaseDataset):
     def __len__(self) -> int:
         return len(self._reader._image_files)
 
-    def __getitem__(self, index: int) -> ObjectDetectionDatum:
+    def __getitem__(self, index: int) -> tuple[od.InputType, od.ObjectDetectionTarget, DatumMetadata]:
         image_path = self._reader._image_files[index]
 
         # Load image

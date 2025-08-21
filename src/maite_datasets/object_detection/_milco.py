@@ -6,14 +6,16 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Literal
 
-import numpy as np
-from numpy.typing import NDArray
+from maite_datasets._base import (
+    BaseDatasetNumpyMixin,
+    BaseODDataset,
+    DataLocation,
+    NumpyArray,
+    NumpyObjectDetectionTransform,
+)
 
-from maite_datasets._base import BaseDatasetNumpyMixin, BaseODDataset, DataLocation
-from maite_datasets._protocols import Transform
 
-
-class MILCO(BaseODDataset[NDArray[np.number[Any]], list[str], str], BaseDatasetNumpyMixin):
+class MILCO(BaseODDataset[NumpyArray, list[str], str], BaseDatasetNumpyMixin):
     """
     A side-scan sonar dataset focused on mine-like object detection.
 
@@ -116,7 +118,7 @@ class MILCO(BaseODDataset[NDArray[np.number[Any]], list[str], str], BaseDatasetN
         self,
         root: str | Path,
         image_set: Literal["train", "operational", "base"] = "train",
-        transforms: Transform[NDArray[np.number[Any]]] | Sequence[Transform[NDArray[np.number[Any]]]] | None = None,
+        transforms: NumpyObjectDetectionTransform | Sequence[NumpyObjectDetectionTransform] | None = None,
         download: bool = False,
         verbose: bool = False,
     ) -> None:

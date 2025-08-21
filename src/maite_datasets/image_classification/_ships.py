@@ -7,13 +7,17 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from numpy.typing import NDArray
 
-from maite_datasets._base import BaseDatasetNumpyMixin, BaseICDataset, DataLocation
-from maite_datasets._protocols import Transform
+from maite_datasets._base import (
+    BaseDatasetNumpyMixin,
+    BaseICDataset,
+    DataLocation,
+    NumpyArray,
+    NumpyImageClassificationTransform,
+)
 
 
-class Ships(BaseICDataset[NDArray[np.number[Any]]], BaseDatasetNumpyMixin):
+class Ships(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
     """
     A dataset that focuses on identifying ships from satellite images.
 
@@ -76,7 +80,7 @@ class Ships(BaseICDataset[NDArray[np.number[Any]]], BaseDatasetNumpyMixin):
     def __init__(
         self,
         root: str | Path,
-        transforms: Transform[NDArray[np.number[Any]]] | Sequence[Transform[NDArray[np.number[Any]]]] | None = None,
+        transforms: NumpyImageClassificationTransform | Sequence[NumpyImageClassificationTransform] | None = None,
         download: bool = False,
         verbose: bool = False,
     ) -> None:
@@ -125,7 +129,7 @@ class Ships(BaseICDataset[NDArray[np.number[Any]]], BaseDatasetNumpyMixin):
         """Function to load in the file paths for the scene images"""
         return sorted(str(entry) for entry in (self.path / "scenes").glob("*.png"))
 
-    def get_scene(self, index: int) -> NDArray[np.number[Any]]:
+    def get_scene(self, index: int) -> NumpyArray:
         """
         Get the desired satellite image (scene) by passing in the index of the desired file.
 

@@ -10,12 +10,11 @@ from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING, Any, TypeVar
 
 import numpy as np
+from maite.protocols import ArrayLike
 from numpy.typing import NDArray
 
 if TYPE_CHECKING:
     import torch
-
-from maite_datasets._protocols import ArrayLike
 
 T_in = TypeVar("T_in")
 T_tgt = TypeVar("T_tgt")

@@ -9,8 +9,13 @@ from typing import Any, Literal, TypeVar
 import numpy as np
 from numpy.typing import NDArray
 
-from maite_datasets._base import BaseDatasetNumpyMixin, BaseICDataset, DataLocation
-from maite_datasets._protocols import Transform
+from maite_datasets._base import (
+    BaseDatasetNumpyMixin,
+    BaseICDataset,
+    DataLocation,
+    NumpyArray,
+    NumpyImageClassificationTransform,
+)
 
 CIFARClassStringMap = Literal[
     "airplane",
@@ -27,7 +32,7 @@ CIFARClassStringMap = Literal[
 TCIFARClassMap = TypeVar("TCIFARClassMap", CIFARClassStringMap, int, list[CIFARClassStringMap], list[int])
 
 
-class CIFAR10(BaseICDataset[NDArray[np.number[Any]]], BaseDatasetNumpyMixin):
+class CIFAR10(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
     """
     `CIFAR10 <https://www.cs.toronto.edu/~kriz/cifar.html>`_ Dataset as NumPy arrays.
 
@@ -89,7 +94,7 @@ class CIFAR10(BaseICDataset[NDArray[np.number[Any]]], BaseDatasetNumpyMixin):
         self,
         root: str | Path,
         image_set: Literal["train", "test", "base"] = "train",
-        transforms: Transform[NDArray[np.number[Any]]] | Sequence[Transform[NDArray[np.number[Any]]]] | None = None,
+        transforms: NumpyImageClassificationTransform | Sequence[NumpyImageClassificationTransform] | None = None,
         download: bool = False,
         verbose: bool = False,
     ) -> None:
@@ -214,7 +219,7 @@ class CIFAR10(BaseICDataset[NDArray[np.number[Any]]], BaseDatasetNumpyMixin):
                 images[i, 2] = blue_channel  # Blue channel
         return images, labels
 
-    def _read_file(self, path: str) -> NDArray[np.number[Any]]:
+    def _read_file(self, path: str) -> NumpyArray:
         """
         Function to grab the correct image from the loaded data.
         Overwrite of the base `_read_file` because data is an all or nothing load.

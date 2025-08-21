@@ -6,6 +6,7 @@ requires-python = ">=3.9"
 dynamic = ["version"]
 dependencies = [
     "defusedxml>=0.7.1",
+    "maite>=0.7,<0.9",
     "numpy>=1.24.2",
     "pillow>=10.3.0",
     "requests>=2.32.3",

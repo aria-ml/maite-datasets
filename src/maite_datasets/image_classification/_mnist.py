@@ -9,8 +9,13 @@ from typing import Any, Literal, TypeVar
 import numpy as np
 from numpy.typing import NDArray
 
-from maite_datasets._base import BaseDatasetNumpyMixin, BaseICDataset, DataLocation
-from maite_datasets._protocols import Transform
+from maite_datasets._base import (
+    BaseDatasetNumpyMixin,
+    BaseICDataset,
+    DataLocation,
+    NumpyArray,
+    NumpyImageClassificationTransform,
+)
 
 MNISTClassStringMap = Literal["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
 TMNISTClassMap = TypeVar("TMNISTClassMap", MNISTClassStringMap, int, list[MNISTClassStringMap], list[int])
@@ -34,7 +39,7 @@ CorruptionStringMap = Literal[
 ]
 
 
-class MNIST(BaseICDataset[NDArray[np.number[Any]]], BaseDatasetNumpyMixin):
+class MNIST(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
     """`MNIST <https://en.wikipedia.org/wiki/MNIST_database>`_ Dataset and `Corruptions <https://arxiv.org/abs/1906.02337>`_.
 
     There are 15 different styles of corruptions. This class downloads differently depending on if you
@@ -118,7 +123,7 @@ class MNIST(BaseICDataset[NDArray[np.number[Any]]], BaseDatasetNumpyMixin):
         root: str | Path,
         image_set: Literal["train", "test", "base"] = "train",
         corruption: CorruptionStringMap | None = None,
-        transforms: Transform[NDArray[np.number[Any]]] | Sequence[Transform[NDArray[np.number[Any]]]] | None = None,
+        transforms: NumpyImageClassificationTransform | Sequence[NumpyImageClassificationTransform] | None = None,
         download: bool = False,
         verbose: bool = False,
     ) -> None:
@@ -149,7 +154,7 @@ class MNIST(BaseICDataset[NDArray[np.number[Any]]], BaseDatasetNumpyMixin):
         index_strings = np.arange(self._loaded_data.shape[0]).astype(str).tolist()
         return index_strings, labels.tolist(), {}
 
-    def _load_corruption(self) -> tuple[NDArray[np.number[Any]], NDArray[np.uintp]]:
+    def _load_corruption(self) -> tuple[NumpyArray, NDArray[np.uintp]]:
         """Function to load in the file paths for the data and labels for the different corrupt data formats"""
         corruption = self.corruption if self.corruption is not None else "identity"
         base_path = self.path / "mnist_c" / corruption
@@ -176,7 +181,7 @@ class MNIST(BaseICDataset[NDArray[np.number[Any]]], BaseDatasetNumpyMixin):
 
         return data, labels
 
-    def _grab_data(self, path: Path) -> tuple[NDArray[np.number[Any]], NDArray[np.uintp]]:
+    def _grab_data(self, path: Path) -> tuple[NumpyArray, NDArray[np.uintp]]:
         """Function to load in the data numpy array"""
         with np.load(path, allow_pickle=True) as data_array:
             if self.image_set == "base":
@@ -190,11 +195,11 @@ class MNIST(BaseICDataset[NDArray[np.number[Any]]], BaseDatasetNumpyMixin):
             data = np.expand_dims(data, axis=1)
         return data, labels
 
-    def _grab_corruption_data(self, path: Path) -> NDArray[np.number[Any]]:
+    def _grab_corruption_data(self, path: Path) -> NumpyArray:
         """Function to load in the data numpy array for the previously chosen corrupt format"""
         return np.load(path, allow_pickle=False)
 
-    def _read_file(self, path: str) -> NDArray[np.number[Any]]:
+    def _read_file(self, path: str) -> NumpyArray:
         """
         Function to grab the correct image from the loaded data.
         Overwrite of the base `_read_file` because data is an all or nothing load.
