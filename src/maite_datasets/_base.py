@@ -66,15 +66,24 @@ class BaseDataset(Dataset[tuple[_TArray, _TTarget, DatumMetadata]]):
     def __init__(
         self,
         transforms: Callable[[_TArray], _TArray]
-        | Callable[[tuple[_TArray, _TTarget, DatumMetadata]], tuple[_TArray, _TTarget, DatumMetadata]]
+        | Callable[
+            [tuple[_TArray, _TTarget, DatumMetadata]],
+            tuple[_TArray, _TTarget, DatumMetadata],
+        ]
         | Sequence[
             Callable[[_TArray], _TArray]
-            | Callable[[tuple[_TArray, _TTarget, DatumMetadata]], tuple[_TArray, _TTarget, DatumMetadata]]
+            | Callable[
+                [tuple[_TArray, _TTarget, DatumMetadata]],
+                tuple[_TArray, _TTarget, DatumMetadata],
+            ]
         ]
         | None,
     ) -> None:
-        self._transforms: Sequence[
-            Callable[[tuple[_TArray, _TTarget, DatumMetadata]], tuple[_TArray, _TTarget, DatumMetadata]]
+        self.transforms: Sequence[
+            Callable[
+                [tuple[_TArray, _TTarget, DatumMetadata]],
+                tuple[_TArray, _TTarget, DatumMetadata],
+            ]
         ] = []
         transforms = transforms if isinstance(transforms, Sequence) else [transforms] if transforms else []
         for transform in transforms:
@@ -83,18 +92,26 @@ class BaseDataset(Dataset[tuple[_TArray, _TTarget, DatumMetadata]]):
                 warnings.warn(f"Dropping unrecognized transform: {str(transform)}")
             elif "tuple" in str(sig.parameters.values()):
                 transform = cast(
-                    Callable[[tuple[_TArray, _TTarget, DatumMetadata]], tuple[_TArray, _TTarget, DatumMetadata]],
+                    Callable[
+                        [tuple[_TArray, _TTarget, DatumMetadata]],
+                        tuple[_TArray, _TTarget, DatumMetadata],
+                    ],
                     transform,
                 )
-                self._transforms.append(transform)
+                self.transforms.append(transform)
             else:
                 transform = cast(Callable[[_TArray], _TArray], transform)
-                self._transforms.append(self._wrap_transform(transform))
+                self.transforms.append(self._wrap_transform(transform))
 
     def _wrap_transform(
         self, transform: Callable[[_TArray], _TArray]
-    ) -> Callable[[tuple[_TArray, _TTarget, DatumMetadata]], tuple[_TArray, _TTarget, DatumMetadata]]:
-        def wrapper(datum: tuple[_TArray, _TTarget, DatumMetadata]) -> tuple[_TArray, _TTarget, DatumMetadata]:
+    ) -> Callable[
+        [tuple[_TArray, _TTarget, DatumMetadata]],
+        tuple[_TArray, _TTarget, DatumMetadata],
+    ]:
+        def wrapper(
+            datum: tuple[_TArray, _TTarget, DatumMetadata],
+        ) -> tuple[_TArray, _TTarget, DatumMetadata]:
             image, target, metadata = datum
             return (transform(image), target, metadata)
 
@@ -102,7 +119,7 @@ class BaseDataset(Dataset[tuple[_TArray, _TTarget, DatumMetadata]]):
 
     def _transform(self, datum: tuple[_TArray, _TTarget, DatumMetadata]) -> tuple[_TArray, _TTarget, DatumMetadata]:
         """Function to transform the image prior to returning based on parameters passed in."""
-        for transform in self._transforms:
+        for transform in self.transforms:
             datum = transform(datum)
         return datum
 
@@ -143,10 +160,16 @@ class BaseDownloadedDataset(
         root: str | Path,
         image_set: Literal["train", "val", "test", "operational", "base"] = "train",
         transforms: Callable[[_TArray], _TArray]
-        | Callable[[tuple[_TArray, _TTarget, DatumMetadata]], tuple[_TArray, _TTarget, DatumMetadata]]
+        | Callable[
+            [tuple[_TArray, _TTarget, DatumMetadata]],
+            tuple[_TArray, _TTarget, DatumMetadata],
+        ]
         | Sequence[
             Callable[[_TArray], _TArray]
-            | Callable[[tuple[_TArray, _TTarget, DatumMetadata]], tuple[_TArray, _TTarget, DatumMetadata]]
+            | Callable[
+                [tuple[_TArray, _TTarget, DatumMetadata]],
+                tuple[_TArray, _TTarget, DatumMetadata],
+            ]
         ]
         | None = None,
         download: bool = False,
