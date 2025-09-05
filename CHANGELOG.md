@@ -1,5 +1,10 @@
 # Changelog for maite-datasets
 
+## v0.0.6
+
+- [feat] Add Torchvision convenience wrapper
+- [impr] Update base datasets to allow for image or datum transforms
+
 ## v0.0.5
 
 - [fix] Fix test and type check errors

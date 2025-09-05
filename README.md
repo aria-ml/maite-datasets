@@ -54,10 +54,10 @@ tuple(<class 'numpy.ndarray'>, <class 'numpy.ndarray'>, <class 'dict'>)
 
 Wrappers provide a way to convert datasets to allow usage of tools within specific backend frameworks.
 
-`TorchWrapper` is a convenience class that wraps any of the datasets and provides the capability to apply
+`TorchvisionWrapper` is a convenience class that wraps any of the datasets and provides the capability to apply
 `torchvision` transforms to the dataset.
 
-**NOTE:** `TorchWrapper` requires _torch_ and _torchvision_ to be installed.
+**NOTE:** `TorchvisionWrapper` requires _torch_ and _torchvision_ to be installed.
 
 ```python
 >>> from maite_datasets.object_detection import MILCO
@@ -78,12 +78,12 @@ type=ndarray, shape=(3, 1024, 1024)
 >>> print(milco[0][1].boxes[0])
 [ 75. 217. 130. 247.]
 
->>> from maite_datasets.wrappers import TorchWrapper
+>>> from maite_datasets.wrappers import TorchvisionWrapper
 >>> from torchvision.transforms.v2 import Resize
 
->>> milco_torch = TorchWrapper(milco, transforms=Resize(224))
+>>> milco_torch = TorchvisionWrapper(milco, transforms=Resize(224))
 >>> print(milco_torch)
-Torch Wrapped MILCO Dataset
+Torchvision Wrapped MILCO Dataset
 ---------------------------
     Transforms: Resize(size=[224], interpolation=InterpolationMode.BILINEAR, antialias=True)
 

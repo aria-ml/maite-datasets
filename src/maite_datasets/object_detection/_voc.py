@@ -15,9 +15,9 @@ from maite_datasets._base import (
     BaseDownloadedDataset,
     BaseODDataset,
     DataLocation,
-    GenericObjectDetectionTarget,
     NumpyArray,
     NumpyObjectDetectionTransform,
+    ObjectDetectionTarget,
     _ensure_exists,
 )
 
@@ -46,7 +46,7 @@ VOCClassStringMap = Literal[
 TVOCClassMap = TypeVar("TVOCClassMap", VOCClassStringMap, int, list[VOCClassStringMap], list[int])
 
 
-class BaseVOCDataset(BaseDownloadedDataset[NumpyArray, GenericObjectDetectionTarget[NumpyArray], list[str], str]):
+class BaseVOCDataset(BaseDownloadedDataset[NumpyArray, ObjectDetectionTarget, list[str], str]):
     _resources = [
         DataLocation(
             url="https://data.brainchip.com/dataset-mirror/voc/VOCtrainval_11-May-2012.tar",

@@ -5,8 +5,8 @@ __all__ = []
 import inspect
 import warnings
 from abc import abstractmethod
+from collections import namedtuple
 from collections.abc import Iterator, Sequence
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Generic, Literal, NamedTuple, TypeVar, cast
 
@@ -31,18 +31,7 @@ _TRawTarget = TypeVar(
 _TAnnotation = TypeVar("_TAnnotation", int, str, tuple[list[int], list[list[float]]])
 
 
-class DataLocation(NamedTuple):
-    url: str
-    filename: str
-    md5: bool
-    checksum: str
-
-
-@dataclass
-class GenericObjectDetectionTarget(Generic[_TArray]):
-    boxes: _TArray
-    labels: _TArray
-    scores: _TArray
+ObjectDetectionTarget = namedtuple("ObjectDetectionTarget", ["boxes", "labels", "scores"])
 
 
 class BaseDatasetMixin(Generic[_TArray]):
@@ -135,6 +124,13 @@ class BaseDataset(Dataset[tuple[_TArray, _TTarget, DatumMetadata]]):
             if not k.startswith("_")
         ]
         return f"{title}\n{sep}{nt}{nt.join(attrs)}"
+
+
+class DataLocation(NamedTuple):
+    url: str
+    filename: str
+    md5: bool
+    checksum: str
 
 
 class BaseDownloadedDataset(
@@ -282,9 +278,9 @@ class BaseICDataset(
 
 
 class BaseODDataset(
-    BaseDownloadedDataset[_TArray, GenericObjectDetectionTarget[_TArray], _TRawTarget, _TAnnotation],
+    BaseDownloadedDataset[_TArray, ObjectDetectionTarget, _TRawTarget, _TAnnotation],
     BaseDatasetMixin[_TArray],
-    BaseDataset[_TArray, GenericObjectDetectionTarget[_TArray]],
+    BaseDataset[_TArray, ObjectDetectionTarget],
 ):
     """
     Base class for object detection datasets.
@@ -292,7 +288,7 @@ class BaseODDataset(
 
     _bboxes_per_size: bool = False
 
-    def __getitem__(self, index: int) -> tuple[_TArray, GenericObjectDetectionTarget[_TArray], DatumMetadata]:
+    def __getitem__(self, index: int) -> tuple[_TArray, ObjectDetectionTarget, DatumMetadata]:
         """
         Args
         ----
@@ -301,7 +297,7 @@ class BaseODDataset(
 
         Returns
         -------
-        tuple[TArray, ObjectDetectionTarget[TArray], DatumMetadata]
+        tuple[TArray, ObjectDetectionTarget, DatumMetadata]
             Image, target, datum_metadata - target.boxes returns boxes in x0, y0, x1, y1 format
         """
         # Grab the bounding boxes and labels from the annotations
@@ -314,9 +310,7 @@ class BaseODDataset(
         if self._bboxes_per_size and boxes:
             boxes = boxes * np.asarray([[img_size[1], img_size[2], img_size[1], img_size[2]]])
         # Create the Object Detection Target
-        target = GenericObjectDetectionTarget(
-            self._as_array(boxes), self._as_array(labels), self._one_hot_encode(labels)
-        )
+        target = ObjectDetectionTarget(self._as_array(boxes), self._as_array(labels), self._one_hot_encode(labels))
 
         img_metadata = {key: val[index] for key, val in self._datum_metadata.items()}
         img_metadata = img_metadata | additional_metadata
@@ -353,8 +347,8 @@ NumpyImageClassificationDatumTransform = Callable[
     tuple[NumpyArray, NumpyArray, DatumMetadata],
 ]
 NumpyObjectDetectionDatumTransform = Callable[
-    [tuple[NumpyArray, GenericObjectDetectionTarget[NumpyArray], DatumMetadata]],
-    tuple[NumpyArray, GenericObjectDetectionTarget[NumpyArray], DatumMetadata],
+    [tuple[NumpyArray, ObjectDetectionTarget, DatumMetadata]],
+    tuple[NumpyArray, ObjectDetectionTarget, DatumMetadata],
 ]
 NumpyImageClassificationTransform = NumpyImageTransform | NumpyImageClassificationDatumTransform
 NumpyObjectDetectionTransform = NumpyImageTransform | NumpyObjectDetectionDatumTransform
