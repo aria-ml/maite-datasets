@@ -1,4 +1,4 @@
-"""Unit tests for TorchWrapper class."""
+"""Unit tests for TorchvisionWrapper class."""
 
 from collections.abc import Iterator
 from typing import Any
@@ -9,8 +9,8 @@ import pytest
 import torch
 from torchvision.tv_tensors import BoundingBoxes, BoundingBoxFormat, Image
 
-from maite_datasets._base import GenericObjectDetectionTarget
-from maite_datasets.wrappers._torch import TorchWrapper
+from maite_datasets._base import ObjectDetectionTarget
+from maite_datasets.wrappers._torch import TorchvisionWrapper
 
 
 class MockArray:
@@ -46,7 +46,7 @@ class MockObjectDetectionTarget:
 
 
 class MockDataset:
-    """Mock dataset for testing TorchWrapper."""
+    """Mock dataset for testing TorchvisionWrapper."""
 
     def __init__(self, data, metadata=None):
         self.data = data
@@ -99,47 +99,47 @@ def od_dataset(ic_numpy_image, od_target, datum_metadata):
 
 
 class TestTorchWrapper:
-    """Test TorchWrapper functionality."""
+    """Test TorchvisionWrapper functionality."""
 
     def test_init_without_transforms(self, ic_dataset):
         """Test initialization without transforms."""
-        wrapper = TorchWrapper(ic_dataset)
+        wrapper = TorchvisionWrapper(ic_dataset)
 
         assert wrapper._dataset is ic_dataset
         assert wrapper.transforms is None
-        assert wrapper.metadata["id"] == "TorchWrapper(test_dataset)"
+        assert wrapper.metadata["id"] == "TorchvisionWrapper(test_dataset)"
         assert wrapper.metadata["index2label"] == {0: "class0", 1: "class1"}
 
     def test_init_with_transforms(self, ic_dataset):
         """Test initialization with transforms."""
         transform_fn = Mock()
-        wrapper = TorchWrapper(ic_dataset, transforms=transform_fn)
+        wrapper = TorchvisionWrapper(ic_dataset, transforms=transform_fn)
 
         assert wrapper.transforms is transform_fn
 
     def test_init_missing_index2label(self, ic_numpy_image, ic_target, datum_metadata):
         """Test initialization when dataset metadata missing index2label."""
         dataset = MockDataset([(ic_numpy_image, ic_target, datum_metadata)], {"id": "test"})
-        wrapper = TorchWrapper(dataset)
+        wrapper = TorchvisionWrapper(dataset)
 
         assert wrapper.metadata["index2label"] == {}
 
     def test_getattr_forwards_to_dataset(self, ic_dataset):
         """Test attribute forwarding to wrapped dataset."""
-        wrapper = TorchWrapper(ic_dataset)
+        wrapper = TorchvisionWrapper(ic_dataset)
 
         assert wrapper.custom_attr == "test_value"
 
     def test_getattr_raises_for_nonexistent(self, ic_dataset):
         """Test AttributeError for non-existent attributes."""
-        wrapper = TorchWrapper(ic_dataset)
+        wrapper = TorchvisionWrapper(ic_dataset)
 
         with pytest.raises(AttributeError):
             _ = wrapper.nonexistent_attr
 
     def test_dir_includes_dataset_attrs(self, ic_dataset):
         """Test __dir__ includes wrapped dataset attributes."""
-        wrapper = TorchWrapper(ic_dataset)
+        wrapper = TorchvisionWrapper(ic_dataset)
         attrs = dir(wrapper)
 
         assert "custom_attr" in attrs
@@ -148,19 +148,18 @@ class TestTorchWrapper:
 
     def test_len(self, ic_dataset):
         """Test __len__ forwards to dataset."""
-        wrapper = TorchWrapper(ic_dataset)
+        wrapper = TorchvisionWrapper(ic_dataset)
 
         assert len(wrapper) == len(ic_dataset)
 
     def test_getitem_image_classification(self, ic_dataset):
         """Test __getitem__ for image classification."""
-        wrapper = TorchWrapper(ic_dataset)
+        wrapper = TorchvisionWrapper(ic_dataset)
         torch_image, torch_target, metadata = wrapper[0]
 
         # Check image conversion
         assert isinstance(torch_image, Image)
-        assert torch_image.dtype == torch.float32
-        assert torch_image.max() <= 1.0  # Should be normalized
+        assert torch_image.dtype == torch.uint8
         assert torch_image.shape == (3, 32, 32)  # CHW format
 
         # Check target conversion
@@ -173,15 +172,15 @@ class TestTorchWrapper:
 
     def test_getitem_object_detection(self, od_dataset):
         """Test __getitem__ for object detection."""
-        wrapper = TorchWrapper(od_dataset)
+        wrapper = TorchvisionWrapper(od_dataset)
         torch_image, torch_target, metadata = wrapper[0]
 
         # Check image conversion
         assert isinstance(torch_image, Image)
-        assert torch_image.dtype == torch.float32
+        assert torch_image.dtype == torch.uint8
 
         # Check target conversion
-        assert isinstance(torch_target, GenericObjectDetectionTarget)
+        assert isinstance(torch_target, ObjectDetectionTarget)
         assert isinstance(torch_target.boxes, BoundingBoxes)
         assert torch_target.boxes.format == BoundingBoxFormat.XYXY
         assert torch_target.boxes.canvas_size == (32, 32)
@@ -197,32 +196,25 @@ class TestTorchWrapper:
     def test_getitem_with_transforms_ic(self, ic_dataset):
         """Test __getitem__ with transforms for image classification."""
 
-        def mock_transform(image, target_dict):
-            # Modify image and target
-            modified_image = image * 0.5
-            modified_target = {"labels": target_dict["labels"] * 2}
-            return modified_image, modified_target
+        def mock_transform(datum):
+            image, target, metadata = datum
+            return image * 0.5, target * 2, metadata
 
-        wrapper = TorchWrapper(ic_dataset, transforms=mock_transform)
+        wrapper = TorchvisionWrapper(ic_dataset, transforms=mock_transform)
         torch_image, torch_target, metadata = wrapper[0]
 
         # Check transform was applied
-        assert torch_image.max() <= 0.5  # Should be scaled down
+        assert torch_image.max() <= ic_dataset[0][0].max() * 0.5
         np.testing.assert_array_equal(torch_target.numpy(), [0.0, 2.0, 0.0])
 
     def test_getitem_with_transforms_od(self, od_dataset):
         """Test __getitem__ with transforms for object detection."""
 
-        def mock_transform(image, target_dict):
-            # Modify target boxes
-            modified_target = {
-                "boxes": target_dict["boxes"] * 2,
-                "labels": target_dict["labels"],
-                "scores": target_dict["scores"],
-            }
-            return image, modified_target
+        def mock_transform(datum):
+            image, target, metadata = datum
+            return image, ObjectDetectionTarget(target.boxes * 2, target.labels, target.scores), metadata
 
-        wrapper = TorchWrapper(od_dataset, transforms=mock_transform)
+        wrapper = TorchvisionWrapper(od_dataset, transforms=mock_transform)
         torch_image, torch_target, metadata = wrapper[0]
 
         # Check transform was applied to boxes
@@ -233,7 +225,7 @@ class TestTorchWrapper:
         """Test __getitem__ with float image doesn't get normalized."""
         float_image = np.random.rand(3, 32, 32).astype(np.float32)
         dataset = MockDataset([(float_image, ic_target, datum_metadata)])
-        wrapper = TorchWrapper(dataset)
+        wrapper = TorchvisionWrapper(dataset)
 
         torch_image, _, _ = wrapper[0]
         # Float images should not be divided by 255
@@ -243,7 +235,7 @@ class TestTorchWrapper:
         """Test __getitem__ with array-like target."""
         array_target = MockArray([0.0, 1.0, 0.0])
         dataset = MockDataset([(ic_numpy_image, array_target, datum_metadata)])
-        wrapper = TorchWrapper(dataset)
+        wrapper = TorchvisionWrapper(dataset)
 
         torch_image, torch_target, metadata = wrapper[0]
         assert isinstance(torch_target, torch.Tensor)
@@ -253,29 +245,29 @@ class TestTorchWrapper:
         """Test __getitem__ raises TypeError for unsupported target."""
         unsupported_target = "invalid_target"
         dataset = MockDataset([(ic_numpy_image, unsupported_target, datum_metadata)])
-        wrapper = TorchWrapper(dataset)
+        wrapper = TorchvisionWrapper(dataset)
 
         with pytest.raises(TypeError, match="Unsupported target type"):
             _ = wrapper[0]
 
     def test_str_representation(self, ic_dataset):
         """Test string representation."""
-        wrapper = TorchWrapper(ic_dataset)
+        wrapper = TorchvisionWrapper(ic_dataset)
         str_repr = str(wrapper)
 
-        assert "Torch Wrapped Mock Dataset" in str_repr
+        assert "Torchvision Wrapped Mock Dataset" in str_repr
         assert "Transforms: None" in str_repr
         assert str(ic_dataset) in str_repr
 
     def test_str_representation_avoids_double_torch(self):
         """Test string representation doesn't double 'Torch' prefix."""
 
-        class TorchMockDataset(MockDataset):
+        class TorchvisionMockDataset(MockDataset):
             pass
 
-        dataset = TorchMockDataset([])
-        wrapper = TorchWrapper(dataset)
+        dataset = TorchvisionMockDataset([])
+        wrapper = TorchvisionWrapper(dataset)
         str_repr = str(wrapper)
 
-        # Should not have "Torch Wrapped Torch"
-        assert "Torch Wrapped TorchMock Dataset" not in str_repr
+        # Should not have "Torchvision Wrapped"
+        assert "Torchvision Wrapped" not in str_repr
