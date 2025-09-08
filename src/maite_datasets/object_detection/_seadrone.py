@@ -12,6 +12,7 @@ from maite_datasets._base import (
     BaseODDataset,
     DataLocation,
     NumpyArray,
+    NumpyObjectDetectionTarget,
     NumpyObjectDetectionTransform,
 )
 from maite_datasets._fileio import _ensure_exists
@@ -20,6 +21,7 @@ from maite_datasets._fileio import _ensure_exists
 class SeaDrone(
     BaseODDataset[
         NumpyArray,
+        NumpyObjectDetectionTarget,
         list[tuple[list[int], list[list[float]]]],
         tuple[list[int], list[list[float]]],
     ],

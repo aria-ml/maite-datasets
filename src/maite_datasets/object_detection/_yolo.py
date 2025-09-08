@@ -12,7 +12,7 @@ import numpy as np
 from maite.protocols import DatasetMetadata, DatumMetadata
 from PIL import Image
 
-from maite_datasets._base import BaseDataset, ObjectDetectionTarget
+from maite_datasets._base import BaseDataset, ObjectDetectionTargetTuple
 from maite_datasets._reader import BaseDatasetReader
 
 
@@ -297,7 +297,7 @@ class YOLODataset(BaseDataset):
             labels = np.empty(0, dtype=np.int64)
             scores = np.empty(0, dtype=np.float32)
 
-        target = ObjectDetectionTarget(boxes, labels, scores)
+        target = ObjectDetectionTargetTuple(boxes, labels, scores)
 
         # Create comprehensive datum metadata
         datum_metadata = DatumMetadata(

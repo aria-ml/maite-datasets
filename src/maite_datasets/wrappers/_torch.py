@@ -1,21 +1,31 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Generic, TypeAlias, TypeVar, cast, overload
+from typing import Any, Callable, Generic, Protocol, TypeAlias, TypeVar, cast, overload
 
 import torch
 from maite.protocols import DatasetMetadata, DatumMetadata
-from maite.protocols.object_detection import ObjectDetectionTarget as _ObjectDetectionTarget
+from maite.protocols.object_detection import ObjectDetectionTarget
 from torch import Tensor
 from torchvision.tv_tensors import BoundingBoxes, Image
 
-from maite_datasets._base import BaseDataset, ObjectDetectionTarget
+from maite_datasets._base import BaseDataset, ObjectDetectionTargetTuple
 from maite_datasets.protocols import Array
 
 TArray = TypeVar("TArray", bound=Array)
 TTarget = TypeVar("TTarget")
 
+
+class TorchvisionObjectDetectionTarget(Protocol):
+    @property
+    def boxes(self) -> BoundingBoxes: ...
+    @property
+    def labels(self) -> Tensor: ...
+    @property
+    def scores(self) -> Tensor: ...
+
+
 TorchvisionImageClassificationDatum: TypeAlias = tuple[Image, Tensor, DatumMetadata]
-TorchvisionObjectDetectionDatum: TypeAlias = tuple[Image, ObjectDetectionTarget, DatumMetadata]
+TorchvisionObjectDetectionDatum: TypeAlias = tuple[Image, ObjectDetectionTargetTuple, DatumMetadata]
 
 
 class TorchvisionWrapper(Generic[TArray, TTarget]):
@@ -62,9 +72,9 @@ class TorchvisionWrapper(Generic[TArray, TTarget]):
     @overload
     def __getitem__(
         self: TorchvisionWrapper[TArray, TTarget], index: int
-    ) -> tuple[Image, ObjectDetectionTarget, DatumMetadata]: ...
+    ) -> tuple[Image, TorchvisionObjectDetectionTarget, DatumMetadata]: ...
 
-    def __getitem__(self, index: int) -> tuple[Image, Tensor | ObjectDetectionTarget, DatumMetadata]:
+    def __getitem__(self, index: int) -> tuple[Image, Tensor | TorchvisionObjectDetectionTarget, DatumMetadata]:
         """Get item with torch tensor conversion."""
         image, target, metadata = self._dataset[index]
 
@@ -78,14 +88,14 @@ class TorchvisionWrapper(Generic[TArray, TTarget]):
             torch_datum = self._transform((torch_image, torch_target, metadata))
             return cast(TorchvisionImageClassificationDatum, torch_datum)
 
-        if isinstance(target, _ObjectDetectionTarget):
+        if isinstance(target, ObjectDetectionTarget):
             # Object detection case
             torch_boxes = BoundingBoxes(
                 torch.tensor(target.boxes), format="XYXY", canvas_size=(torch_image.shape[-2], torch_image.shape[-1])
             )  # type: ignore
             torch_labels = torch.tensor(target.labels, dtype=torch.int64)
             torch_scores = torch.tensor(target.scores, dtype=torch.float32)
-            torch_target = ObjectDetectionTarget(torch_boxes, torch_labels, torch_scores)
+            torch_target = ObjectDetectionTargetTuple(torch_boxes, torch_labels, torch_scores)
             torch_datum = self._transform((torch_image, torch_target, metadata))
             return cast(TorchvisionObjectDetectionDatum, torch_datum)
 

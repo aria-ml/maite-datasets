@@ -13,11 +13,12 @@ from maite_datasets._base import (
     BaseODDataset,
     DataLocation,
     NumpyArray,
+    NumpyObjectDetectionTarget,
     NumpyObjectDetectionTransform,
 )
 
 
-class AntiUAVDetection(BaseODDataset[NumpyArray, list[str], str], BaseDatasetNumpyMixin):
+class AntiUAVDetection(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str], BaseDatasetNumpyMixin):
     """
     A UAV detection dataset focused on detecting UAVs in natural images against large variation in backgrounds.
 

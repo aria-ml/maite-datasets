@@ -11,11 +11,12 @@ from maite_datasets._base import (
     BaseODDataset,
     DataLocation,
     NumpyArray,
+    NumpyObjectDetectionTarget,
     NumpyObjectDetectionTransform,
 )
 
 
-class MILCO(BaseODDataset[NumpyArray, list[str], str], BaseDatasetNumpyMixin):
+class MILCO(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str], BaseDatasetNumpyMixin):
     """
     A side-scan sonar dataset focused on mine-like object detection.
 

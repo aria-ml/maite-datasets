@@ -3,7 +3,7 @@ Common type protocols used for interoperability.
 """
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from typing import Any, Protocol, overload, runtime_checkable
+from typing import Any, Generic, Protocol, TypeVar, overload, runtime_checkable
 
 
 @runtime_checkable
@@ -21,6 +21,17 @@ class Array(Protocol):
     def __getitem__(self, key: Any, /) -> Any: ...
     def __iter__(self) -> Iterator[Any]: ...
     def __len__(self) -> int: ...
+
+
+TBoxes = TypeVar("TBoxes", Array, Sequence)
+TLabels = TypeVar("TLabels", Array, Sequence)
+TScores = TypeVar("TScores", Array, Sequence)
+
+
+class GenericObjectDetectionTarget(Generic[TBoxes, TLabels, TScores], Protocol):
+    boxes: TBoxes
+    labels: TLabels
+    scores: TScores
 
 
 @runtime_checkable

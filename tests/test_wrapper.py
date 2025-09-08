@@ -9,7 +9,7 @@ import pytest
 import torch
 from torchvision.tv_tensors import BoundingBoxes, BoundingBoxFormat, Image
 
-from maite_datasets._base import ObjectDetectionTarget
+from maite_datasets._base import ObjectDetectionTargetTuple
 from maite_datasets.wrappers._torch import TorchvisionWrapper
 
 
@@ -180,7 +180,7 @@ class TestTorchWrapper:
         assert torch_image.dtype == torch.uint8
 
         # Check target conversion
-        assert isinstance(torch_target, ObjectDetectionTarget)
+        assert isinstance(torch_target, ObjectDetectionTargetTuple)
         assert isinstance(torch_target.boxes, BoundingBoxes)
         assert torch_target.boxes.format == BoundingBoxFormat.XYXY
         assert torch_target.boxes.canvas_size == (32, 32)
@@ -212,7 +212,7 @@ class TestTorchWrapper:
 
         def mock_transform(datum):
             image, target, metadata = datum
-            return image, ObjectDetectionTarget(target.boxes * 2, target.labels, target.scores), metadata
+            return image, ObjectDetectionTargetTuple(target.boxes * 2, target.labels, target.scores), metadata
 
         wrapper = TorchvisionWrapper(od_dataset, transforms=mock_transform)
         torch_image, torch_target, metadata = wrapper[0]

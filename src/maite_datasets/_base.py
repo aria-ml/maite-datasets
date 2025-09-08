@@ -8,20 +8,22 @@ from abc import abstractmethod
 from collections import namedtuple
 from collections.abc import Iterator, Sequence
 from pathlib import Path
-from typing import Any, Callable, Generic, Literal, NamedTuple, TypeVar, cast
+from typing import Any, Callable, Generic, Literal, NamedTuple, Protocol, TypeVar, cast
 
 import numpy as np
 from maite.protocols import DatasetMetadata, DatumMetadata
+from maite.protocols import image_classification as ic
+from maite.protocols import object_detection as od
 from numpy.typing import NDArray
 from PIL import Image
 
 from maite_datasets._fileio import _ensure_exists
 from maite_datasets.protocols import Array
 
-_T = TypeVar("_T")
 _T_co = TypeVar("_T_co", covariant=True)
 _TArray = TypeVar("_TArray", bound=Array)
 _TTarget = TypeVar("_TTarget")
+_TODTarget = TypeVar("_TODTarget", bound=od.ObjectDetectionTarget)
 _TRawTarget = TypeVar(
     "_TRawTarget",
     Sequence[int],
@@ -30,8 +32,7 @@ _TRawTarget = TypeVar(
 )
 _TAnnotation = TypeVar("_TAnnotation", int, str, tuple[list[int], list[list[float]]])
 
-
-ObjectDetectionTarget = namedtuple("ObjectDetectionTarget", ["boxes", "labels", "scores"])
+ObjectDetectionTargetTuple = namedtuple("ObjectDetectionTargetTuple", ["boxes", "labels", "scores"])
 
 
 class BaseDatasetMixin(Generic[_TArray]):
@@ -249,6 +250,7 @@ class BaseICDataset(
     BaseDownloadedDataset[_TArray, _TArray, list[int], int],
     BaseDatasetMixin[_TArray],
     BaseDataset[_TArray, _TArray],
+    ic.Dataset,
 ):
     """
     Base class for image classification datasets.
@@ -278,9 +280,10 @@ class BaseICDataset(
 
 
 class BaseODDataset(
-    BaseDownloadedDataset[_TArray, ObjectDetectionTarget, _TRawTarget, _TAnnotation],
+    BaseDownloadedDataset[_TArray, _TODTarget, _TRawTarget, _TAnnotation],
     BaseDatasetMixin[_TArray],
-    BaseDataset[_TArray, ObjectDetectionTarget],
+    BaseDataset[_TArray, _TODTarget],
+    od.Dataset,
 ):
     """
     Base class for object detection datasets.
@@ -288,7 +291,7 @@ class BaseODDataset(
 
     _bboxes_per_size: bool = False
 
-    def __getitem__(self, index: int) -> tuple[_TArray, ObjectDetectionTarget, DatumMetadata]:
+    def __getitem__(self, index: int) -> tuple[_TArray, _TODTarget, DatumMetadata]:
         """
         Args
         ----
@@ -310,7 +313,9 @@ class BaseODDataset(
         if self._bboxes_per_size and boxes:
             boxes = boxes * np.asarray([[img_size[1], img_size[2], img_size[1], img_size[2]]])
         # Create the Object Detection Target
-        target = ObjectDetectionTarget(self._as_array(boxes), self._as_array(labels), self._one_hot_encode(labels))
+        target = ObjectDetectionTargetTuple(self._as_array(boxes), self._as_array(labels), self._one_hot_encode(labels))
+        # Cast target explicitly to ODTarget as namedtuple does not provide any typing metadata
+        target = cast(_TODTarget, target)
 
         img_metadata = {key: val[index] for key, val in self._datum_metadata.items()}
         img_metadata = img_metadata | additional_metadata
@@ -322,6 +327,15 @@ class BaseODDataset(
 
 
 NumpyArray = NDArray[np.floating[Any]] | NDArray[np.integer[Any]]
+
+
+class NumpyObjectDetectionTarget(od.ObjectDetectionTarget, Protocol):
+    @property
+    def boxes(self) -> NumpyArray: ...
+    @property
+    def labels(self) -> NumpyArray: ...
+    @property
+    def scores(self) -> NumpyArray: ...
 
 
 class BaseDatasetNumpyMixin(BaseDatasetMixin[NumpyArray]):
@@ -347,8 +361,8 @@ NumpyImageClassificationDatumTransform = Callable[
     tuple[NumpyArray, NumpyArray, DatumMetadata],
 ]
 NumpyObjectDetectionDatumTransform = Callable[
-    [tuple[NumpyArray, ObjectDetectionTarget, DatumMetadata]],
-    tuple[NumpyArray, ObjectDetectionTarget, DatumMetadata],
+    [tuple[NumpyArray, NumpyObjectDetectionTarget, DatumMetadata]],
+    tuple[NumpyArray, NumpyObjectDetectionTarget, DatumMetadata],
 ]
 NumpyImageClassificationTransform = NumpyImageTransform | NumpyImageClassificationDatumTransform
 NumpyObjectDetectionTransform = NumpyImageTransform | NumpyObjectDetectionDatumTransform

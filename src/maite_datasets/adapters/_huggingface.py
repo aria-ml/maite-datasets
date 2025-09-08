@@ -10,7 +10,7 @@ import maite.protocols.object_detection as od
 import numpy as np
 from maite.protocols import DatasetMetadata, DatumMetadata
 
-from maite_datasets._base import BaseDataset, NumpyArray, ObjectDetectionTarget
+from maite_datasets._base import BaseDataset, NumpyArray, ObjectDetectionTargetTuple
 from maite_datasets.protocols import HFArray, HFClassLabel, HFDataset, HFImage, HFList, HFValue
 from maite_datasets.wrappers._torch import TTarget
 
@@ -157,7 +157,7 @@ class HFImageClassificationDataset(HFBaseDataset[NumpyArray], ic.Dataset):
         return image, one_hot_label, datum_metadata
 
 
-class HFObjectDetectionDataset(HFBaseDataset[ObjectDetectionTarget], od.Dataset):
+class HFObjectDetectionDataset(HFBaseDataset[ObjectDetectionTargetTuple], od.Dataset):
     """Wraps a Hugging Face dataset to comply with the ObjectDetectionDataset protocol."""
 
     def __init__(self, hf_dataset: HFDataset, image_key: str, objects_key: str, bbox_key: str, label_key: str) -> None:
@@ -225,7 +225,7 @@ class HFObjectDetectionDataset(HFBaseDataset[ObjectDetectionTarget], od.Dataset)
 
         return label_feature
 
-    def __getitem__(self, index: int) -> tuple[NumpyArray, ObjectDetectionTarget, DatumMetadata]:
+    def __getitem__(self, index: int) -> tuple[NumpyArray, ObjectDetectionTargetTuple, DatumMetadata]:
         if not 0 <= index < len(self.source):
             raise IndexError(f"Index {index} out of range for dataset of size {len(self.source)}")
 
@@ -237,7 +237,7 @@ class HFObjectDetectionDataset(HFBaseDataset[ObjectDetectionTarget], od.Dataset)
         boxes = objects[self._bbox_key]
         labels = objects[self._label_key]
         scores = np.zeros_like(labels, dtype=np.float32)
-        target = ObjectDetectionTarget(boxes, labels, scores)
+        target = ObjectDetectionTargetTuple(boxes, labels, scores)
 
         # Process metadata
         datum_metadata = self._get_base_metadata(index)
