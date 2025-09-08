@@ -1,11 +1,10 @@
 variables:
-  PYTHON_LATEST_SUPPORTED_VERSION: '3.12'
-  DOCKER_DRIVER: overlay2
+  PYTHON_LATEST_SUPPORTED_VERSION: '3.13'
   SAST_EXCLUDED_PATHS: spec,test,tests,tmp,.nox,output
   UV_CACHE_DIR: .uv-cache
   UV_LINK_MODE: copy
   UV_IMAGE: ghcr.io/astral-sh/uv
-  BASE_LAYER: bookworm
+  UV_BASE_LAYER: bookworm
   FORCE_COLOR: '1'
 
 workflow:
@@ -31,7 +30,7 @@ default:
   tags:
     - autoscaler
 
-image: $UV_IMAGE:python$PYTHON_LATEST_SUPPORTED_VERSION-$BASE_LAYER
+image: $UV_IMAGE:python$PYTHON_LATEST_SUPPORTED_VERSION-$UV_BASE_LAYER
 
 stages:
   - test
@@ -52,7 +51,7 @@ stages:
 
 .nox:
   needs: []
-  image: $UV_IMAGE:python$PYTHON_VERSION-$BASE_LAYER
+  image: $UV_IMAGE:python$PYTHON_VERSION-$UV_BASE_LAYER
   before_script:
     - uv pip install nox[uv] --system
   cache:
@@ -69,10 +68,10 @@ stages:
 
 .nox_all:
   extends: .nox
-  image: $UV_IMAGE:python$PYTHON_VERSION-$BASE_LAYER
+  image: $UV_IMAGE:python$PYTHON_VERSION-$UV_BASE_LAYER
   parallel:
     matrix:
-      - PYTHON_VERSION: ["3.9", "3.10", "3.11", "3.12"]
+      - PYTHON_VERSION: ["3.10", "3.11", "3.12", "3.13"]
 
 ### TEST ###
 

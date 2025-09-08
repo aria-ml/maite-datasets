@@ -11,7 +11,6 @@ nox.options.default_venv_backend = "uv"
 nox.options.sessions = ["test", "type", "lint"]
 
 COMMON_ENVS = {"TQDM_DISABLE": "1"}
-SUPPORTED_VERSIONS = ("3.9", "3.10", "3.11", "3.12")
 
 
 def prep(session: nox.Session) -> str:
@@ -20,8 +19,6 @@ def prep(session: nox.Session) -> str:
     pattern = re.compile(r".*(3.\d+)$")
     matches = pattern.match(version)
     version = matches.groups()[0] if matches is not None and len(matches.groups()) > 0 else PYTHON_VERSION
-    if version not in SUPPORTED_VERSIONS:
-        raise ValueError(f"Specified python version {version} is not supported.")
     return version
 
 
