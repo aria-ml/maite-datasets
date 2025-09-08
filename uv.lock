@@ -593,19 +593,16 @@ tqdm = [
 
 [package.dev-dependencies]
 base = [
-    { name = "nox", extra = ["uv"] },
-    { name = "torch", version = "2.7.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
-    { name = "torch", version = "2.7.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
-    { name = "torchvision", version = "0.22.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(python_full_version < '3.14' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or sys_platform == 'darwin'" },
-    { name = "torchvision", version = "0.22.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(python_full_version >= '3.14' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
-    { name = "tqdm" },
+    { name = "nox" },
+    { name = "nox-uv" },
     { name = "uv" },
 ]
 dev = [
     { name = "codespell", extra = ["toml"] },
     { name = "coverage", extra = ["toml"] },
     { name = "ipykernel" },
-    { name = "nox", extra = ["uv"] },
+    { name = "nox" },
+    { name = "nox-uv" },
     { name = "pyright", extra = ["nodejs"] },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -619,11 +616,22 @@ dev = [
 ]
 lint = [
     { name = "codespell", extra = ["toml"] },
+    { name = "nox" },
+    { name = "nox-uv" },
     { name = "ruff" },
+    { name = "uv" },
+]
+more = [
+    { name = "torch", version = "2.7.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
+    { name = "torch", version = "2.7.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
+    { name = "torchvision", version = "0.22.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(python_full_version < '3.14' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or sys_platform == 'darwin'" },
+    { name = "torchvision", version = "0.22.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(python_full_version >= '3.14' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
+    { name = "tqdm" },
 ]
 test = [
     { name = "coverage", extra = ["toml"] },
-    { name = "nox", extra = ["uv"] },
+    { name = "nox" },
+    { name = "nox-uv" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "torch", version = "2.7.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
@@ -634,7 +642,8 @@ test = [
     { name = "uv" },
 ]
 type = [
-    { name = "nox", extra = ["uv"] },
+    { name = "nox" },
+    { name = "nox-uv" },
     { name = "pyright", extra = ["nodejs"] },
     { name = "torch", version = "2.7.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
     { name = "torch", version = "2.7.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
@@ -658,17 +667,16 @@ provides-extras = ["tqdm"]
 
 [package.metadata.requires-dev]
 base = [
-    { name = "nox", extras = ["uv"], specifier = ">=2025.5.1" },
-    { name = "torch", specifier = ">=2.2.0", index = "https://download.pytorch.org/whl/cpu" },
-    { name = "torchvision", specifier = ">=0.17.0", index = "https://download.pytorch.org/whl/cpu" },
-    { name = "tqdm", specifier = ">=4.66" },
+    { name = "nox", specifier = ">=2025.5.1" },
+    { name = "nox-uv", specifier = ">=0.6.2" },
     { name = "uv", specifier = ">=0.8.0" },
 ]
 dev = [
     { name = "codespell", extras = ["toml"], specifier = ">=2.3" },
     { name = "coverage", extras = ["toml"], specifier = ">=7.6" },
     { name = "ipykernel", specifier = ">=6.30.0" },
-    { name = "nox", extras = ["uv"], specifier = ">=2025.5.1" },
+    { name = "nox", specifier = ">=2025.5.1" },
+    { name = "nox-uv", specifier = ">=0.6.2" },
     { name = "pyright", extras = ["nodejs"], specifier = ">=1.1.400" },
     { name = "pytest", specifier = ">=8.3" },
     { name = "pytest-cov", specifier = ">=6.1" },
@@ -680,11 +688,20 @@ dev = [
 ]
 lint = [
     { name = "codespell", extras = ["toml"], specifier = ">=2.3" },
+    { name = "nox", specifier = ">=2025.5.1" },
+    { name = "nox-uv", specifier = ">=0.6.2" },
     { name = "ruff", specifier = ">=0.11" },
+    { name = "uv", specifier = ">=0.8.0" },
+]
+more = [
+    { name = "torch", specifier = ">=2.2.0", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torchvision", specifier = ">=0.17.0", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "tqdm", specifier = ">=4.66" },
 ]
 test = [
     { name = "coverage", extras = ["toml"], specifier = ">=7.6" },
-    { name = "nox", extras = ["uv"], specifier = ">=2025.5.1" },
+    { name = "nox", specifier = ">=2025.5.1" },
+    { name = "nox-uv", specifier = ">=0.6.2" },
     { name = "pytest", specifier = ">=8.3" },
     { name = "pytest-cov", specifier = ">=6.1" },
     { name = "torch", specifier = ">=2.2.0", index = "https://download.pytorch.org/whl/cpu" },
@@ -693,7 +710,8 @@ test = [
     { name = "uv", specifier = ">=0.8.0" },
 ]
 type = [
-    { name = "nox", extras = ["uv"], specifier = ">=2025.5.1" },
+    { name = "nox", specifier = ">=2025.5.1" },
+    { name = "nox-uv", specifier = ">=0.6.2" },
     { name = "pyright", extras = ["nodejs"], specifier = ">=1.1.400" },
     { name = "torch", specifier = ">=2.2.0", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torchvision", specifier = ">=0.17.0", index = "https://download.pytorch.org/whl/cpu" },
@@ -863,9 +881,16 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/a6/be/7b423b02b09eb856beffe76fe8c4121c99852db74dd12a422dcb72d1134e/nox-2025.5.1-py3-none-any.whl", hash = "sha256:56abd55cf37ff523c254fcec4d152ed51e5fe80e2ab8317221d8b828ac970a31", size = 71753, upload-time = "2025-05-01T16:35:46.037Z" },
 ]
 
-[package.optional-dependencies]
-uv = [
-    { name = "uv" },
+[[package]]
+name = "nox-uv"
+version = "0.6.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "nox" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f2/18/726fc3942a5d2a6a8686d0b220aa12e8459e4294181c7842715e7dc0c2db/nox_uv-0.6.2.tar.gz", hash = "sha256:a7a0ffa9a868f48cf919e09f18fb266a89d5cac69a69ce1799fcfd6a7ba09285", size = 4937, upload-time = "2025-07-31T00:28:44.719Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fb/7c/b6d82aa05f9790846733cd7d5696641f5bdf8704d267a9ccb9e92b977f9d/nox_uv-0.6.2-py3-none-any.whl", hash = "sha256:705b3054d0f3f8134872f03e01ea29ee35d5c8a8a7085b3751306c82d35d4b6d", size = 5335, upload-time = "2025-07-31T00:28:43.961Z" },
 ]
 
 [[package]]
