@@ -54,6 +54,8 @@ tuple(<class 'numpy.ndarray'>, <class 'numpy.ndarray'>, <class 'dict'>)
 
 Wrappers provide a way to convert datasets to allow usage of tools within specific backend frameworks.
 
+### Torchvision
+
 `TorchvisionWrapper` is a convenience class that wraps any of the datasets and provides the capability to apply
 `torchvision` transforms to the dataset.
 
@@ -100,6 +102,41 @@ type=Image, shape=torch.Size([3, 224, 224])
 
 >>> print(milco_torch[0][1].boxes[0])
 tensor([16.4062, 47.4688, 28.4375, 54.0312], dtype=torch.float64)
+```
+
+## Dataset Adapters
+
+Adapters provide a way to read in datasets from other popular formats.
+
+### Huggingface
+
+Hugging face datasets can be adapted into MAITE compliant format using the `from_huggingface` adapter.
+
+```python
+>>> from datasets import load_dataset
+>>> from maite_datasets.adapters import from_huggingface
+
+>>> cppe5 = load_dataset("cppe-5")
+>>> m_cppe5 = from_huggingface(cppe5["train"])
+>>> print(m_cppe5)
+HFObjectDetection Dataset
+-------------------------
+    Source: Dataset({
+    features: ['image_id', 'image', 'width', 'height', 'objects'],
+    num_rows: 1000
+})
+    Metadata: {'id': 'cppe-5', 'index2label': {0: 'Coverall', 1: 'Face_Shield', 2: 'Gloves', 3: 'Goggles', 4: 'Mask'}, 'description': '', 'citation': '', 'homepage': '', 'license': '', 'features': {'image_id': Value('int64'), 'image': Image(mode=None, decode=True), 'width': Value('int32'), 'height': Value('int32'), 'objects': {'id': List(Value('int64')), 'area': List(Value('int64')), 'bbox': List(List(Value('float32'), length=4)), 'category': List(ClassLabel(names=['Coverall', 'Face_Shield', 'Gloves', 'Goggles', 'Mask']))}}, 'post_processed': None, 'supervised_keys': None, 'builder_name': 'parquet', 'dataset_name': 'cppe-5', 'config_name': 'default', 'version': 0.0.0, 'splits': {'train': SplitInfo(name='train', num_bytes=240478590, num_examples=1000, shard_lengths=None, dataset_name='cppe-5'), 'test': SplitInfo(name='test', num_bytes=4172706, num_examples=29, shard_lengths=None, dataset_name='cppe-5')}, 'download_checksums': {'hf://datasets/cppe-5@66f6a5efd474e35bd7cb94bf15dea27d4c6ad3f8/data/train-00000-of-00001.parquet': {'num_bytes': 237015519, 'checksum': None}, 'hf://datasets/cppe-5@66f6a5efd474e35bd7cb94bf15dea27d4c6ad3f8/data/test-00000-of-00001.parquet': {'num_bytes': 4137134, 'checksum': None}}, 'download_size': 241152653, 'post_processing_size': None, 'dataset_size': 244651296, 'size_in_bytes': 485803949}
+
+>>> image = m_cppe5[0][0]
+>>> print(f"type={image.__class__.__name__}, shape={image.shape}")
+type=ndarray, shape=(3, 663, 943)
+
+>>> target = m_cppe5[0][1]
+>>> print(f"box={target.boxes[0]}, label={target.labels[0]}")
+box=[302.0, 109.0, 73.0, 52.0], label=4
+
+>>> print(m_cppe5[0][2])
+{'id': [114, 115, 116, 117], 'image_id': 15, 'width': 943, 'height': 663, 'area': [3796, 1596, 152768, 81002]}
 ```
 
 ## Additional Information
