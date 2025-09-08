@@ -1,5 +1,12 @@
 # Changelog for maite-datasets
 
+## v0.0.7
+
+- [feat] Add HuggingFace dataset adapter support
+- [feat] Add support for MAITE datum transforms to base dataset
+- [impr] Change ObjectDetectionTarget to `namedtuple` for native Torchvision support
+- [deps] Add Python 3.13 support and drop Python 3.9 support
+
 ## v0.0.6
 
 - [feat] Add Torchvision convenience wrapper
