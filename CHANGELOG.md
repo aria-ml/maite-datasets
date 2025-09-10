@@ -1,5 +1,9 @@
 # Changelog for maite-datasets
 
+## v0.0.8
+
+- [hotfix] Fix `from_huggingface` image classification index2label
+
 ## v0.0.7
 
 - [feat] Add HuggingFace dataset adapter support
