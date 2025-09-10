@@ -135,7 +135,7 @@ class HFImageClassificationDataset(HFBaseDataset[NumpyArray], ic.Dataset):
 
         # Enhanced metadata with validation
         self.metadata: DatasetMetadata = DatasetMetadata(
-            id=self._metadata_id, index2label=dict(enumerate(label_feature.names), **self._metadata_dict)
+            id=self._metadata_id, index2label=dict(enumerate(label_feature.names)), **self._metadata_dict
         )
 
     def __getitem__(self, index: int) -> tuple[NumpyArray, NumpyArray, DatumMetadata]:
