@@ -19,7 +19,7 @@ def get_python_version(s: nox.Session) -> str:
     return matches.group(0) if matches else PYTHON_VERSION
 
 
-@nox_uv.session(python=PYTHON_VERSIONS, uv_groups=["test"])
+@nox_uv.session(uv_groups=["test"])
 def test(s: nox.Session) -> None:
     """Run unit tests with coverage reporting. Specify version using `nox -P {version} -e test`."""
     python_version = get_python_version(s)

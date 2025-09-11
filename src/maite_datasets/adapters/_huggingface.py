@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
@@ -11,6 +12,7 @@ import numpy as np
 from maite.protocols import DatasetMetadata, DatumMetadata
 
 from maite_datasets._base import BaseDataset, NumpyArray, ObjectDetectionTargetTuple
+from maite_datasets._bbox import BoundingBoxFormat, convert_to_xyxy, detect_bbox_format
 from maite_datasets.protocols import HFArray, HFClassLabel, HFDataset, HFImage, HFList, HFValue
 from maite_datasets.wrappers._torch import TTarget
 
@@ -18,6 +20,8 @@ from maite_datasets.wrappers._torch import TTarget
 MAX_VALID_CHANNELS = 10
 
 FeatureDict: TypeAlias = Mapping[str, Any]
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -160,7 +164,15 @@ class HFImageClassificationDataset(HFBaseDataset[NumpyArray], ic.Dataset):
 class HFObjectDetectionDataset(HFBaseDataset[ObjectDetectionTargetTuple], od.Dataset):
     """Wraps a Hugging Face dataset to comply with the ObjectDetectionDataset protocol."""
 
-    def __init__(self, hf_dataset: HFDataset, image_key: str, objects_key: str, bbox_key: str, label_key: str) -> None:
+    def __init__(
+        self,
+        hf_dataset: HFDataset,
+        image_key: str,
+        objects_key: str,
+        bbox_key: str,
+        label_key: str,
+        bbox_format: Literal["xyxy", "xywh", "yolo", "auto"] = "auto",
+    ) -> None:
         super().__init__(hf_dataset, image_key, known_keys={image_key, objects_key})
         self._objects_key = objects_key
         self._bbox_key = bbox_key
@@ -174,6 +186,109 @@ class HFObjectDetectionDataset(HFBaseDataset[ObjectDetectionTargetTuple], od.Dat
         self.metadata: DatasetMetadata = DatasetMetadata(
             id=self._metadata_id, index2label=dict(enumerate(label_feature.names)), **self._metadata_dict
         )
+
+        # Detect bounding box format during initialization
+        if bbox_format == "xyxy":
+            self._bbox_format = BoundingBoxFormat.XYXY
+        elif bbox_format == "xywh":
+            self._bbox_format = BoundingBoxFormat.XYWH
+        elif bbox_format == "yolo":
+            self._bbox_format = BoundingBoxFormat.NORMALIZED_CXCYWH
+        else:
+            self._bbox_format = self._detect_bbox_format()
+            logger.info(f"Detected bounding box format: {self._bbox_format}")
+
+    def _detect_bbox_format(self) -> BoundingBoxFormat:
+        """
+        Detect the bounding box format by sampling from the dataset.
+
+        Returns
+        -------
+        BoundingBoxFormat
+            The detected format of the bounding boxes.
+        """
+        # Sample up to 50 items for format detection to balance accuracy and performance
+        max_samples = min(50, len(self.source))
+        sample_indices = np.linspace(0, len(self.source) - 1, max_samples, dtype=int).tolist()
+
+        all_bboxes = []
+        image_shapes = []
+
+        for idx in sample_indices:
+            try:
+                # Get image for dimension info
+                image = self._get_image(idx)
+                image_shapes.append(image.shape)
+
+                # Get bounding boxes
+                objects = self.source[idx][self._objects_key]
+                boxes = objects[self._bbox_key]
+
+                # Convert to the expected format for detection
+                if boxes:  # Only add if there are boxes
+                    # Convert each box to tuple format
+                    formatted_boxes = []
+                    for box in boxes:
+                        if len(box) == 4:
+                            formatted_boxes.append(tuple(float(coord) for coord in box))
+                    all_bboxes.append(formatted_boxes)
+                else:
+                    all_bboxes.append([])  # Empty list for no boxes
+
+            except Exception as e:
+                logger.warning(f"Failed to process sample {idx} for bbox format detection: {e}")
+                continue
+
+        if not any(all_bboxes) or not image_shapes:
+            logger.warning("No valid bounding boxes found for format detection, defaulting to XYXY")
+            return BoundingBoxFormat.XYXY
+
+        # Detect format
+        detected_format = detect_bbox_format(all_bboxes, image_shapes)
+
+        if detected_format == BoundingBoxFormat.UNKNOWN:
+            logger.warning("Could not detect bounding box format, defaulting to XYXY")
+            return BoundingBoxFormat.XYXY
+
+        return detected_format
+
+    def _convert_bboxes_to_xyxy(self, boxes: list[list[float]], image_shape: tuple[int, int, int]) -> list[list[float]]:
+        """
+        Convert bounding boxes to XYXY format.
+
+        Parameters
+        ----------
+        boxes : list[list[float]]
+            List of bounding boxes in the detected format.
+        image_shape : tuple[int, int, int]
+            Shape of the image in CHW format.
+
+        Returns
+        -------
+        list[list[float]]
+            List of bounding boxes converted to XYXY format.
+        """
+        if not boxes:
+            return boxes
+
+        converted_boxes = []
+        for box in boxes:
+            if len(box) != 4:
+                logger.warning(f"Skipping invalid bounding box with {len(box)} coordinates: {box}")
+                continue
+
+            try:
+                # Convert to XYXY and add to list
+                xyxy_coords = convert_to_xyxy(
+                    box[0], box[1], box[2], box[3], bbox_format=self._bbox_format, image_shape=image_shape
+                )
+                converted_boxes.append(list(xyxy_coords))
+
+            except Exception as e:
+                logger.warning(f"Failed to convert bounding box {box}: {e}")
+                continue
+
+        return converted_boxes
 
     def _validate_and_extract_object_features(self, features: FeatureDict) -> list[str]:
         """Validate objects feature and extract metadata keys."""
@@ -233,11 +348,13 @@ class HFObjectDetectionDataset(HFBaseDataset[ObjectDetectionTargetTuple], od.Dat
         image = self._get_image(index)
         objects = self.source[index][self._objects_key]
 
-        # Process target
-        boxes = objects[self._bbox_key]
+        # Process target - convert bboxes to XYXY format
+        raw_boxes = objects[self._bbox_key]
+        converted_boxes = self._convert_bboxes_to_xyxy(raw_boxes, image.shape)
+
         labels = objects[self._label_key]
-        scores = np.zeros_like(labels, dtype=np.float32)
-        target = ObjectDetectionTargetTuple(boxes, labels, scores)
+        scores = np.ones_like(labels, dtype=np.float32)
+        target = ObjectDetectionTargetTuple(converted_boxes, labels, scores)
 
         # Process metadata
         datum_metadata = self._get_base_metadata(index)
@@ -263,6 +380,11 @@ class HFObjectDetectionDataset(HFBaseDataset[ObjectDetectionTargetTuple], od.Dat
                     )
             else:
                 datum_metadata[key] = [value] * num_objects
+
+    @property
+    def bbox_format(self) -> BoundingBoxFormat:
+        """Get the detected bounding box format."""
+        return self._bbox_format
 
 
 def is_bbox(feature: Any) -> bool:
@@ -341,21 +463,33 @@ def get_dataset_info(dataset: HFDataset) -> HFDatasetInfo:
 
 
 @overload
-def from_huggingface(dataset: HFDataset, task: Literal["image_classification"]) -> HFImageClassificationDataset: ...
-
-
-@overload
-def from_huggingface(dataset: HFDataset, task: Literal["object_detection"]) -> HFObjectDetectionDataset: ...
+def from_huggingface(
+    dataset: HFDataset,
+    task: Literal["image_classification"],
+    bbox_format: Literal["xyxy", "xywh", "yolo", "auto"] = "auto",
+) -> HFImageClassificationDataset: ...
 
 
 @overload
 def from_huggingface(
-    dataset: HFDataset, task: Literal["auto"] = "auto"
+    dataset: HFDataset,
+    task: Literal["object_detection"],
+    bbox_format: Literal["xyxy", "xywh", "yolo", "auto"] = "auto",
+) -> HFObjectDetectionDataset: ...
+
+
+@overload
+def from_huggingface(
+    dataset: HFDataset,
+    task: Literal["auto"] = "auto",
+    bbox_format: Literal["xyxy", "xywh", "yolo", "auto"] = "auto",
 ) -> HFObjectDetectionDataset | HFImageClassificationDataset: ...
 
 
 def from_huggingface(
-    dataset: HFDataset, task: Literal["image_classification", "object_detection", "auto"] = "auto"
+    dataset: HFDataset,
+    task: Literal["image_classification", "object_detection", "auto"] = "auto",
+    bbox_format: Literal["xyxy", "xywh", "yolo", "auto"] = "auto",
 ) -> HFObjectDetectionDataset | HFImageClassificationDataset:
     """Create appropriate dataset wrapper with enhanced error handling."""
     info = get_dataset_info(dataset)
@@ -372,7 +506,9 @@ def from_huggingface(
 
     elif isinstance(info, HFObjectDetectionDatasetInfo):
         if task in ("object_detection", "auto"):
-            return HFObjectDetectionDataset(dataset, info.image_key, info.objects_key, info.bbox_key, info.label_key)
+            return HFObjectDetectionDataset(
+                dataset, info.image_key, info.objects_key, info.bbox_key, info.label_key, bbox_format
+            )
         if task == "image_classification":
             raise ValueError(
                 f"Task mismatch: requested 'image_classification' but dataset appears to be "
