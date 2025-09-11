@@ -10,7 +10,7 @@ import torch
 from torchvision.tv_tensors import BoundingBoxes, BoundingBoxFormat, Image
 
 from maite_datasets._base import ObjectDetectionTargetTuple
-from maite_datasets.wrappers._torch import TorchvisionWrapper
+from maite_datasets.wrappers._torch import TorchvisionWrapper, to_tensor
 
 
 class MockArray:
@@ -271,3 +271,32 @@ class TestTorchWrapper:
 
         # Should not have "Torchvision Wrapped"
         assert "Torchvision Wrapped" not in str_repr
+
+
+class TestToTensor:
+    def test_list_to_tensor(self):
+        source = [1, 2, 3]
+        tensor = to_tensor(source)
+        assert len(source) == len(tensor)
+        assert all(source[i] == tensor[i] for i in range(len(source)))
+
+    def test_numpy_to_tensor(self):
+        source = np.array([1, 2, 3])
+        tensor = to_tensor(source)
+        assert source.shape == tensor.shape
+        assert all(source[i] == tensor[i] for i in range(len(source)))
+
+    def test_tensor_to_tensor(self, recwarn):
+        source = torch.tensor([1, 2, 3])
+        tensor = to_tensor(source)
+        # tensor = torch.tensor(source) # this will raise warning and fail test
+        assert source.shape == tensor.shape
+        assert all(source[i] == tensor[i] for i in range(len(source)))
+        for warning in recwarn:
+            assert "To copy construct from a tensor" not in str(warning.message)
+
+    def test_tensor_dtype(self):
+        source = torch.tensor([1, 2, 3], dtype=torch.int64)
+        tensor = to_tensor(source, dtype=torch.float32)
+        assert source.dtype == torch.int64
+        assert tensor.dtype == torch.float32

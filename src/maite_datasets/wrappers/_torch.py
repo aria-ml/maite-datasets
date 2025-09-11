@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Callable, Generic, Protocol, TypeAlias, TypeVar, cast, overload
 
 import torch
-from maite.protocols import DatasetMetadata, DatumMetadata
+from maite.protocols import ArrayLike, DatasetMetadata, DatumMetadata
 from maite.protocols.object_detection import ObjectDetectionTarget
 from torch import Tensor
 from torchvision.tv_tensors import BoundingBoxes, Image
@@ -13,6 +13,14 @@ from maite_datasets.protocols import Array
 
 TArray = TypeVar("TArray", bound=Array)
 TTarget = TypeVar("TTarget")
+
+
+def to_tensor(array: ArrayLike, dtype: torch.dtype | None = None) -> torch.Tensor:
+    return (
+        array.detach().clone().to(device="cpu", dtype=dtype)
+        if isinstance(array, torch.Tensor)
+        else torch.tensor(array, dtype=dtype)
+    )
 
 
 class TorchvisionObjectDetectionTarget(Protocol):
@@ -79,22 +87,22 @@ class TorchvisionWrapper(Generic[TArray, TTarget]):
         image, target, metadata = self._dataset[index]
 
         # Convert image to torch tensor
-        torch_image = Image(torch.tensor(image))
+        torch_image = Image(to_tensor(image))
 
         # Handle different target types
         if isinstance(target, Array):
             # Image classification case
-            torch_target = torch.tensor(target, dtype=torch.float32)
+            torch_target = to_tensor(target, dtype=torch.float32)
             torch_datum = self._transform((torch_image, torch_target, metadata))
             return cast(TorchvisionImageClassificationDatum, torch_datum)
 
         if isinstance(target, ObjectDetectionTarget):
             # Object detection case
             torch_boxes = BoundingBoxes(
-                torch.tensor(target.boxes), format="XYXY", canvas_size=(torch_image.shape[-2], torch_image.shape[-1])
+                to_tensor(target.boxes), format="XYXY", canvas_size=(torch_image.shape[-2], torch_image.shape[-1])
             )  # type: ignore
-            torch_labels = torch.tensor(target.labels, dtype=torch.int64)
-            torch_scores = torch.tensor(target.scores, dtype=torch.float32)
+            torch_labels = to_tensor(target.labels, dtype=torch.int64)
+            torch_scores = to_tensor(target.scores, dtype=torch.float32)
             torch_target = ObjectDetectionTargetTuple(torch_boxes, torch_labels, torch_scores)
             torch_datum = self._transform((torch_image, torch_target, metadata))
             return cast(TorchvisionObjectDetectionDatum, torch_datum)
