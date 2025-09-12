@@ -1,5 +1,10 @@
 # Changelog for maite-datasets
 
+## v0.0.9
+
+- [feat] Add bounding box format with auto detection to Huggingface adapters
+- [fix] Fix warning when tensors are created from tensors in `TorchvisionWrapper`
+
 ## v0.0.8
 
 - [hotfix] Fix `from_huggingface` image classification index2label
