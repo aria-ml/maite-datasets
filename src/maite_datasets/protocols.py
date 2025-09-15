@@ -37,7 +37,7 @@ class GenericObjectDetectionTarget(Generic[TBoxes, TLabels, TScores], Protocol):
 @runtime_checkable
 class HFDatasetInfo(Protocol):
     @property
-    def dataset_name(self) -> str: ...
+    def dataset_name(self) -> str | None: ...
 
 
 @runtime_checkable
