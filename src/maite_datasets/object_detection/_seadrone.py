@@ -532,4 +532,9 @@ class SeaDrone(
         labels: list[int] = annotation[0]
         boxes: list[list[float]] = annotation[1]
 
-        return boxes, labels, {}
+        def xywh_to_xyxy(xywh: list[float]) -> list[float]:
+            return [xywh[0], xywh[1], xywh[0] + xywh[2], xywh[1] + xywh[3]]
+
+        xyxy = [xywh_to_xyxy(box) for box in boxes]
+
+        return xyxy, labels, {}
