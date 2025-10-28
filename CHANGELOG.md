@@ -1,5 +1,9 @@
 # Changelog for maite-datasets
 
+## v0.0.10
+
+- [fix] Seadrone bounding box format corrected from xywh to xyxy
+
 ## v0.0.9
 
 - [feat] Add bounding box format with auto detection to Huggingface adapters
