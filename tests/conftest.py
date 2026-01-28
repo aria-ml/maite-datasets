@@ -65,38 +65,6 @@ def mnist_folder(tmp_path):
     yield mnist_folder
 
 
-@pytest.fixture
-def dataset_nested_folder(mnist_folder):
-    random_temp = mnist_folder.parent.parent / "random"
-    random_temp.mkdir()
-    zip_temp = mnist_folder / "mnist_c.zip"
-    nested_temp = random_temp / "mnist_c" / "translate"
-    nested_temp.mkdir(parents=True)
-    temp_labels = nested_temp / "train_labels.npy"
-    temp_images = nested_temp / "train_images.npy"
-    labels = np.arange(10).repeat(500)
-    train = np.ones((5000, 28, 28, 1)) * labels[:, None, None, None]
-    np.save(temp_images, train, allow_pickle=False)
-    np.save(temp_labels, labels, allow_pickle=False)
-
-    shutil.make_archive(str(mnist_folder / "mnist_c"), "zip", root_dir=random_temp)
-    yield zip_temp
-
-
-@pytest.fixture
-def wrong_mnist(mnist_folder):
-    ident_temp = mnist_folder / "mnist_c" / "identity"
-    ident_temp.mkdir(parents=True, exist_ok=True)
-    labels = np.arange(10).repeat(500)
-    train = np.ones((5000, 28, 28, 1)) * labels[:, None, None, None]
-
-    np.save(ident_temp / "train_images.npy", train, allow_pickle=False)
-    np.save(ident_temp / "train_labels.npy", labels, allow_pickle=False)
-    np.save(ident_temp / "test_images.npy", train, allow_pickle=False)
-    np.save(ident_temp / "test_labels.npy", labels, allow_pickle=False)
-    yield mnist_folder.parent
-
-
 @pytest.fixture(scope="session")
 def mnist_npy(tmp_path_factory):
     temp = tmp_path_factory.mktemp("data")

@@ -10,6 +10,8 @@ dependencies = [
     "numpy>=1.24.2",
     "pillow>=10.3.0",
     "requests>=2.32.3",
+    "scikit-image>=0.25.2",
+    "scipy>=1.15.3",
     "typing-extensions>=4.12",
 ]
 license = "MIT"
@@ -31,9 +33,8 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-tqdm = [
-    "tqdm>=4.66",
-]
+tqdm = ["tqdm>=4.66"]
+opencv = ["opencv-python-headless>=4.10.0"]
 
 [dependency-groups]
 base = [
@@ -70,6 +71,7 @@ dev = [
   { include-group = "test" },
   { include-group = "type" },
   "ipykernel>=6.30.0",
+  "matplotlib>=3.9",
 ]
 
 [tool.uv.sources]

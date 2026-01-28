@@ -7,6 +7,7 @@ from maite.protocols.object_detection import ObjectDetectionTarget
 from maite_datasets._base import DataLocation
 from maite_datasets.image_classification._cifar10 import CIFAR10
 from maite_datasets.image_classification._mnist import MNIST
+from maite_datasets.image_classification._mnist_corruptions import ALL_CORRUPTIONS
 from maite_datasets.image_classification._ships import Ships
 from maite_datasets.object_detection._antiuav import AntiUAVDetection
 from maite_datasets.object_detection._milco import MILCO
@@ -33,15 +34,6 @@ class TestMNIST:
         img, *_ = dataset[0]
         assert img.shape == (1, 28, 28)
 
-    def test_mnist_wrong_initialization(self, wrong_mnist):
-        """Test MNIST dataset initialization if asked for normal but downloaded corrupt."""
-        dataset = MNIST(root=wrong_mnist, image_set="base")
-        assert isinstance(dataset._targets, list)
-        assert isinstance(dataset._targets[0], int)
-        assert len(dataset) == 10000
-        img, *_ = dataset[0]
-        assert img.shape == (1, 28, 28)
-
     def test_mnist_test_data(self, mnist_npy):
         """Test loading the test set."""
         dataset = MNIST(root=mnist_npy, image_set="base")
@@ -51,38 +43,25 @@ class TestMNIST:
         img, *_ = dataset[0]
         assert img.shape == (1, 28, 28)
 
-    # @pytest.mark.parametrize(
-    #     "classes, subset, expected",
-    #     [
-    #         (["zero", "one", "two", "five", "nine"], {0, 1, 2, 5, 9}, 200),
-    #         ([4, 7, 8, 9, 15], {4, 7, 8, 9}, 250),
-    #         ("six", {6}, 1000),
-    #         (3, {3}, 1000),
-    #         (np.array([3, 5]), {3, 5}, 500),
-    #         (("2", "8"), {2, 8}, 500),
-    #     ],
-    # )
-    # def test_mnist_class_selection(self, mnist_npy, classes, subset, expected):
-    #     """Test class selection and equalize functionality."""
-    #     dataset = MNIST(root=mnist_npy, size=1000, classes=classes, balance=True)
-    #     label_array = np.array(dataset._annotations, dtype=np.uintp)
-    #     labels = np.unique(label_array[dataset._indices])
-    #     counts = Counter(label_array[dataset._indices])
-    #     assert set(labels).issubset(subset)
-    #     assert counts[labels[0]] == expected  # type: ignore
+    def test_mnist_wrong_corruption(self, mnist_npy):
+        """Test MNIST dataset initialization if asked for invalid corruption."""
+        with pytest.raises(ValueError, match="Provided corruption - that_one - is not an approved corruption."):
+            MNIST(root=mnist_npy, image_set="base", corruption="that_one")
 
     def test_mnist_corruption(self, capsys, mnist_npy):
         """Test the loading of all the corruptions."""
-        dataset = MNIST(root=mnist_npy, corruption="identity", verbose=False)
-        assert isinstance(dataset._targets, list)
-        assert isinstance(dataset._targets[0], int)
-        assert len(dataset) == 50000
-        img, *_ = dataset[0]
-        assert img.shape == (1, 28, 28)
-        dataset = MNIST(root=mnist_npy, corruption="identity", verbose=True)
-        captured = capsys.readouterr()
-        msg = "Identity is not a corrupted dataset but the original MNIST dataset."
-        assert msg in captured.out
+        for corruption in ALL_CORRUPTIONS:
+            dataset = MNIST(root=mnist_npy, image_set="test", corruption=corruption, verbose=False)
+            assert isinstance(dataset._targets, list)
+            assert isinstance(dataset._targets[0], int)
+            assert len(dataset) == 10000
+            img, *_ = dataset[0]
+            assert img.shape == (1, 28, 28)
+            if corruption == "identity":
+                dataset = MNIST(root=mnist_npy, corruption=corruption, verbose=True)
+                captured = capsys.readouterr()
+                msg = "Identity is not a corrupted dataset but the original MNIST dataset."
+                assert msg in captured.out
 
 
 @pytest.mark.optional

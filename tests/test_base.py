@@ -21,8 +21,8 @@ def get_tmp_hash(fpath, chunk_size=65535):
 @pytest.mark.optional
 class TestBaseDataset:
     @pytest.mark.parametrize("verbose", [True, False])
-    def test_get_resource(self, capsys, dataset_nested_folder, mnist_npy, verbose, monkeypatch):
-        def mock_resources(dataset_nested_folder, mnist_npy):
+    def test_get_resource(self, capsys, mnist_npy, verbose, monkeypatch):
+        def mock_resources(mnist_npy):
             resources = [
                 DataLocation(
                     url="https://storage.googleapis.com/tensorflow/tf-keras-datasets/mnist.npz",
@@ -30,40 +30,18 @@ class TestBaseDataset:
                     md5=False,
                     checksum=get_tmp_hash(mnist_npy / "mnist.npz"),
                 ),
-                DataLocation(
-                    url="https://zenodo.org/record/3239543/files/mnist_c.zip",
-                    filename="mnist_c.zip",
-                    md5=False,
-                    checksum=get_tmp_hash(dataset_nested_folder),
-                ),
             ]
             return resources
 
-        monkeypatch.setattr(MNIST, "_resources", mock_resources(dataset_nested_folder, mnist_npy))
-        datasetA = MNIST(
-            root=dataset_nested_folder.parent,
-            download=False,
-            corruption="translate",
-            verbose=verbose,
-        )
-        assert len(datasetA) == 5000
-        img, *_ = datasetA[0]
-        assert img.shape == (1, 28, 28)
-        if verbose:
-            captured = capsys.readouterr()
-            assert "Determining if mnist_c.zip needs to be downloaded." in captured.out
-            assert "mnist_c.zip already exists, skipping download." in captured.out
-        datasetB = MNIST(root=mnist_npy, download=False, verbose=verbose)
-        assert len(datasetB) == 50000
+        monkeypatch.setattr(MNIST, "_resources", mock_resources(mnist_npy))
+        datasetA = MNIST(root=mnist_npy, download=False, verbose=verbose)
+        assert len(datasetA) == 50000
         img, *_ = datasetA[0]
         assert img.shape == (1, 28, 28)
         if verbose:
             captured = capsys.readouterr()
             assert "Determining if mnist.npz needs to be downloaded." in captured.out
             assert "No download needed, loaded data successfully." in captured.out
-        print(datasetA)
-        captured = capsys.readouterr()
-        assert "Dataset" in captured.out
 
 
 @pytest.mark.optional

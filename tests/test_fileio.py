@@ -124,7 +124,7 @@ class TestHelperFunctionsBaseDataset:
         def mock_get(*args, **kwargs):
             return MockHTTPError()
 
-        monkeypatch.setattr(requests, "get", mock_get)
+        monkeypatch.setattr(requests.Session, "get", mock_get)
         with pytest.raises(RuntimeError):
             _download_dataset(url="http://mock/", file_path=Path("fake/path"))
 
@@ -132,7 +132,7 @@ class TestHelperFunctionsBaseDataset:
         def mock_get(*args, **kwargs):
             return MockRequestException()
 
-        monkeypatch.setattr(requests, "get", mock_get)
+        monkeypatch.setattr(requests.Session, "get", mock_get)
         with pytest.raises(ValueError):
             _download_dataset(url="http://mock/", file_path=Path("fake/path"))
 

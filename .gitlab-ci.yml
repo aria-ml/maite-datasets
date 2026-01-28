@@ -87,6 +87,7 @@ typecheck:
 test:
   extends: .nox_all
   script:
+    - apt-get update && apt-get install -y libgl1
     - nox -P $PYTHON_VERSION -e test
   artifacts:
     reports:
