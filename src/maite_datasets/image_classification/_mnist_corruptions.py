@@ -17,6 +17,11 @@
 #           - removed corruptions that required external file
 #           - rewrote corruptions that required wand dependency
 #           - specific functions to handle batches of images
+#
+# Notes: OpenCV is required for some corruptions. To install, use:
+#    pip install opencv-python-headless
+# or use the extra when install maite-datasets:
+#    pip install maite-datasets[opencv]
 
 import warnings
 from io import BytesIO
