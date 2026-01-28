@@ -46,7 +46,6 @@ stages:
   needs: []
   image: $UV_IMAGE:python$PYTHON_VERSION-$UV_BASE_LAYER
   before_script:
-    - apt-get update && apt-get install -y libgl1
     - uv pip install nox nox-uv --system
   cache:
     - key:
@@ -88,6 +87,7 @@ typecheck:
 test:
   extends: .nox_all
   script:
+    - apt-get update && apt-get install -y libgl1
     - nox -P $PYTHON_VERSION -e test
   artifacts:
     reports:
