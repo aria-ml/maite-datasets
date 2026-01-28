@@ -20,12 +20,11 @@
 
 import warnings
 from io import BytesIO
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
-import cv2
 import numpy as np
 import skimage as sk
-from numpy.typing import NDArray
+from numpy.typing import ArrayLike, NDArray
 from PIL import Image
 from scipy.ndimage import zoom as scizoom
 from scipy.ndimage.interpolation import map_coordinates
@@ -34,10 +33,17 @@ from skimage.filters import gaussian
 
 warnings.simplefilter("ignore", UserWarning)
 
+if TYPE_CHECKING:
+    from cv2.typing import MatLike
+else:
+    MatLike = ArrayLike
+
 # /////////////// Corruption Helpers ///////////////
 
 
-def disk(radius: int, alias_blur: float = 0.1) -> cv2.typing.MatLike:
+def disk(radius: int, alias_blur: float = 0.1) -> MatLike:
+    from cv2 import GaussianBlur
+
     if radius <= 8:
         L = np.arange(-8, 8 + 1)
         ksize = (3, 3)
@@ -49,24 +55,26 @@ def disk(radius: int, alias_blur: float = 0.1) -> cv2.typing.MatLike:
     aliased_disk /= np.sum(aliased_disk)
 
     # supersample disk to antialias
-    return cv2.GaussianBlur(aliased_disk, ksize=ksize, sigmaX=alias_blur)
+    return GaussianBlur(aliased_disk, ksize=ksize, sigmaX=alias_blur)
 
 
 # rewrite of wand library motion_blur using opencv and numpy
-def motion_kernel(radius: float = 0.0, sigma: float = 0.0, angle: float = 0.0) -> cv2.typing.MatLike:
+def motion_kernel(radius: float = 0.0, sigma: float = 0.0, angle: float = 0.0) -> MatLike:
+    from cv2 import getGaussianKernel, getRotationMatrix2D, warpAffine
+
     ksize = int(2 * radius + 1)
     if ksize % 2 == 0:
         ksize += 1
 
-    kernel_1d = cv2.getGaussianKernel(ksize, sigma)
+    kernel_1d = getGaussianKernel(ksize, sigma)
     kernel_2d = np.zeros((ksize, ksize))
 
     pad = ksize // 2
     kernel_2d[:, pad] = kernel_1d[:, 0]
 
     center = (pad, pad)
-    rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
-    kernel_rotated = cv2.warpAffine(kernel_2d, rotation_matrix, (ksize, ksize))
+    rotation_matrix = getRotationMatrix2D(center, angle, 1.0)
+    kernel_rotated = warpAffine(kernel_2d, rotation_matrix, (ksize, ksize))
     kernel_rotated /= kernel_rotated.sum()
 
     return kernel_rotated
@@ -236,11 +244,13 @@ def glass_blur(x: NDArray[np.number], severity: int = 1) -> NDArray[np.float32]:
 
 # modified to handle a batch of images
 def defocus_blur(x: NDArray[np.number], severity: int = 1) -> NDArray[np.float32]:
+    from cv2 import filter2D
+
     c = [(3, 0.1), (4, 0.5), (6, 0.5), (8, 0.5), (10, 0.5)][severity - 1]
 
     x = x.astype(np.float32) / 255.0
     kernel = disk(radius=c[0], alias_blur=c[1])
-    out = np.array([cv2.filter2D(x[i], -1, kernel) for i in range(x.shape[0])])
+    out = np.array([filter2D(x[i], -1, kernel) for i in range(x.shape[0])])
 
     out = np.clip(out, 0, 1) * 255
     return out.astype(np.float32)
@@ -248,11 +258,13 @@ def defocus_blur(x: NDArray[np.number], severity: int = 1) -> NDArray[np.float32
 
 # modified to remove wand dependency
 def motion_blur(x: NDArray[np.number], severity: int = 1) -> NDArray[np.float32]:
+    from cv2 import filter2D
+
     c = [(10, 3), (15, 5), (15, 8), (15, 12), (20, 15)][severity - 1]
 
     x = x.astype(np.float32) / 255.0
     kernel = motion_kernel(radius=c[0], sigma=c[1], angle=np.random.uniform(-45, 45))
-    out = np.array([cv2.filter2D(x[i], -1, kernel) for i in range(x.shape[0])])
+    out = np.array([filter2D(x[i], -1, kernel) for i in range(x.shape[0])])
 
     out = np.clip(out, 0, 1) * 255
     return out.astype(np.float32)
@@ -288,6 +300,8 @@ def fog(x: NDArray[np.number], severity: int = 5) -> NDArray[np.float32]:
 
 # modified to remove wand dependency
 def snow(x: NDArray[np.number], severity: int = 5) -> NDArray[np.float32]:
+    from cv2 import filter2D
+
     c = [
         (0.1, 0.3, 3, 0.5, 10, 4, 0.8),
         (0.2, 0.3, 2, 0.5, 12, 4, 0.7),
@@ -303,7 +317,7 @@ def snow(x: NDArray[np.number], severity: int = 5) -> NDArray[np.float32]:
     snow_layer[snow_layer < c[3]] = 0
 
     kernel = motion_kernel(radius=c[4], sigma=c[5], angle=np.random.uniform(-135, -45))
-    out = cv2.filter2D(snow_layer[0], -1, kernel)
+    out = filter2D(snow_layer[0], -1, kernel)
 
     x = c[6] * x + (1 - c[6]) * np.maximum(x, x * 1.5 + 0.5)
     x = np.clip(x + out + np.rot90(out, k=2), 0, 1) * 255
@@ -400,6 +414,8 @@ def pixelate(x: NDArray[np.number], severity: int = 3) -> NDArray[np.float32]:
 # modified to handle a batch of images
 # mod of https://gist.github.com/erniejunior/601cdf56d2b424757de5
 def elastic_transform(x_arr: NDArray[np.number], severity: int = 1) -> NDArray[np.float32]:
+    from cv2 import BORDER_CONSTANT, getAffineTransform, warpAffine
+
     c = [
         (28 * 2, 28 * 0.7, 28 * 0.1),
         (28 * 2, 28 * 0.08, 28 * 0.2),
@@ -423,7 +439,7 @@ def elastic_transform(x_arr: NDArray[np.number], severity: int = 1) -> NDArray[n
         dtype=np.float32,
     )
     pts2 = pts1 + np.random.uniform(-c[2], c[2], size=pts1.shape).astype(np.float32)
-    M = cv2.getAffineTransform(pts1, pts2)
+    M = getAffineTransform(pts1, pts2)
 
     dx = (gaussian(np.random.uniform(-1, 1, size=shape), c[1], mode="reflect", truncate=3) * c[0]).astype(np.float32)
     dy = (gaussian(np.random.uniform(-1, 1, size=shape), c[1], mode="reflect", truncate=3) * c[0]).astype(np.float32)
@@ -432,7 +448,7 @@ def elastic_transform(x_arr: NDArray[np.number], severity: int = 1) -> NDArray[n
     indices = np.reshape(y + dy, (-1, 1)), np.reshape(x + dx, (-1, 1))
 
     def elastic_one(img: NDArray, M: NDArray, shape: NDArray, indices: tuple[NDArray, NDArray]) -> NDArray[np.number]:
-        img = cv2.warpAffine(img, M, [int(shape[0]), int(shape[1])], borderMode=cv2.BORDER_CONSTANT)
+        img = warpAffine(img, M, [int(shape[0]), int(shape[1])], borderMode=BORDER_CONSTANT)
         return np.clip(map_coordinates(img, indices, order=1, mode="constant").reshape(shape), 0, 1)  # type: ignore
 
     out = np.array([elastic_one(x_arr[i], M, shape, indices) for i in range(x_arr.shape[0])]) * 255
