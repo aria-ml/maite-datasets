@@ -95,7 +95,7 @@ class MNIST(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
         The transforms to be applied to the data.
     size : int
         The size of the dataset.
-    
+
     Note
     ----
     Data License: `CC BY 4.0 <https://creativecommons.org/licenses/by/4.0/>`_ for corruption dataset
@@ -135,7 +135,7 @@ class MNIST(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
         self.corruption = corruption
         if self.corruption == "identity" and verbose:
             print("Identity is not a corrupted dataset but the original MNIST dataset.")
-        if corruption not in list(ALL_CORRUPTIONS.keys()):
+        if corruption not in list(ALL_CORRUPTIONS.keys()) + [None]:
             raise ValueError(f"Provided corruption - {corruption} - is not an approved corruption.")
         self._resource_index = 0
 
@@ -158,14 +158,13 @@ class MNIST(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
         index_strings = np.arange(self._loaded_data.shape[0]).astype(str).tolist()
         return index_strings, labels.tolist(), {}
 
-    def _load_corruption(self) -> tuple[NumpyArray, NDArray[np.uintp]]:
+    def _load_corruption(self) -> NumpyArray:
         """Function to load in the file paths for the data and labels for the different corrupt data formats"""
-        corruption = ALL_CORRUPTIONS[self.corruption]
+        corruption = ALL_CORRUPTIONS[self.corruption if self.corruption is not None else "identity"]
         original = self._loaded_data.squeeze()
         data = corruption(original)
         data = data.astype(np.uint8)
         return np.expand_dims(data, axis=1)
-
 
     def _grab_data(self, path: Path) -> tuple[NumpyArray, NDArray[np.uintp]]:
         """Function to load in the data numpy array"""

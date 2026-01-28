@@ -35,7 +35,15 @@ def _download_dataset(url: str, file_path: Path, timeout: int = 60, verbose: boo
     """Download a single resource from its URL to the `data_folder`."""
     error_msg = "URL fetch failure on {}: {} -- {}"
     try:
-        response = requests.get(url, stream=True, timeout=timeout)
+        session = requests.Session()
+        session.headers.update(
+            {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",  # noqa: E501
+                "Referer": "https://google.com/",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            }
+        )
+        response = session.get(url, stream=True, timeout=timeout)
         response.raise_for_status()
     except requests.exceptions.HTTPError as e:
         raise RuntimeError(f"{error_msg.format(url, e.response.status_code, e.response.reason)}") from e
@@ -127,7 +135,7 @@ def _ensure_exists(
     if not check_path.exists() and download:
         _print(f"Downloading {filename} from {url}", verbose)
         _download_dataset(url, check_path, verbose=verbose)
-
+        print(check_path, check_path.exists(), check_path.stat().st_size)
         if not _validate_file(check_path, checksum, md5):
             raise Exception("File checksum mismatch. Remove current file and retry download.")
 
