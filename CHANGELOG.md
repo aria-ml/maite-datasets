@@ -1,5 +1,9 @@
 # Changelog for maite-datasets
 
+## v0.0.12
+
+- [impr] Transform MNIST corruptions programmatically
+
 ## v0.0.10
 
 - [fix] Seadrone bounding box format corrected from xywh to xyxy
