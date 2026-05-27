@@ -74,40 +74,52 @@ class TestHelperFunctionsBaseDataset:
             _ensure_exists(*resource, dataset_no_zip.parent, dataset_no_zip.parent, False)
         assert err_msg in str(e.value)
 
-    def test_ensure_exists_download_non_zip(self, capsys, mnist_folder):
-        resource = (
-            "https://storage.googleapis.com/tensorflow/tf-keras-datasets/mnist.npz",
-            "mnist.npz",
-            False,
-            "731c5ac602752760c8e48fbffcf8c3b850d9dc2a2aedcf2cc48468fc17b673d1",
-        )
+    def test_ensure_exists_download_non_zip(self, capsys, mnist_folder, monkeypatch, tmp_path):
+        payload = tmp_path / "payload.bin"
+        payload.write_bytes(b"fake-mnist-content")
+        checksum = hashlib.sha256(payload.read_bytes()).hexdigest()
+
+        def fake_download(url, file_path, *args, **kwargs):
+            file_path.write_bytes(payload.read_bytes())
+
+        monkeypatch.setattr("maite_datasets._fileio._download_dataset", fake_download)
+
+        url = "https://example.invalid/mnist.npz"
+        resource = (url, "mnist.npz", False, checksum)
         _ensure_exists(*resource, mnist_folder, mnist_folder.parent, True, True)
         captured = capsys.readouterr()
-        assert (
-            "Downloading mnist.npz from https://storage.googleapis.com/tensorflow/tf-keras-datasets/mnist.npz"
-            in captured.out
-        )
+        assert f"Downloading mnist.npz from {url}" in captured.out
 
-    def test_ensure_exists_download_bad_checksum(self, mnist_folder):
-        resource = (
-            "https://storage.googleapis.com/tensorflow/tf-keras-datasets/mnist.npz",
-            "mnist.npz",
-            False,
-            "abc",
-        )
+    def test_ensure_exists_download_bad_checksum(self, mnist_folder, monkeypatch):
+        def fake_download(url, file_path, *args, **kwargs):
+            file_path.write_bytes(b"anything")
+
+        monkeypatch.setattr("maite_datasets._fileio._download_dataset", fake_download)
+
+        resource = ("https://example.invalid/mnist.npz", "mnist.npz", False, "abc")
         err_msg = "File checksum mismatch. Remove current file and retry download."
         with pytest.raises(Exception) as e:
             _ensure_exists(*resource, mnist_folder, mnist_folder.parent, True, False)
         assert err_msg in str(e.value)
 
     @pytest.mark.parametrize("verbose", [True, False])
-    def test_ensure_exists_download_zip(self, capsys, mnist_folder, verbose):
-        resource = (
-            "https://figshare.com/ndownloader/files/43168999",
-            "2021.zip",
-            True,
-            "b84749b21fa95a4a4c7de3741db78bc7",
-        )
+    def test_ensure_exists_download_zip(self, capsys, mnist_folder, verbose, monkeypatch, tmp_path):
+        from zipfile import ZipFile
+
+        # Build a real zip fixture so extraction has something valid to operate on.
+        inner = tmp_path / "payload.txt"
+        inner.write_text("hello")
+        zip_fixture = tmp_path / "fixture.zip"
+        with ZipFile(zip_fixture, "w") as zf:
+            zf.write(inner, arcname="payload.txt")
+        checksum = get_tmp_hash(zip_fixture)
+
+        def fake_download(url, file_path, *args, **kwargs):
+            file_path.write_bytes(zip_fixture.read_bytes())
+
+        monkeypatch.setattr("maite_datasets._fileio._download_dataset", fake_download)
+
+        resource = ("https://example.invalid/fake.zip", "2021.zip", True, checksum)
         _ensure_exists(*resource, mnist_folder, mnist_folder.parent, True, verbose)
         if verbose:
             captured = capsys.readouterr()
