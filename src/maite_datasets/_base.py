@@ -18,6 +18,7 @@ from numpy.typing import NDArray
 from PIL import Image
 
 from maite_datasets._fileio import _ensure_exists
+from maite_datasets._lazy import LazyArray
 from maite_datasets.protocols import Array
 
 _T_co = TypeVar("_T_co", covariant=True)
@@ -41,6 +42,7 @@ class BaseDatasetMixin(Generic[_TArray]):
     def _as_array(self, raw: list[Any]) -> _TArray: ...
     def _one_hot_encode(self, value: int | list[int]) -> _TArray: ...
     def _read_file(self, path: str) -> _TArray: ...
+    def _read_shape(self, path: str) -> tuple[int, ...]: ...
 
 
 class Dataset(Generic[_T_co]):
@@ -69,12 +71,20 @@ class BaseDataset(Dataset[tuple[_TArray, _TTarget, DatumMetadata]]):
         ]
         | None,
     ) -> None:
-        self.transforms: Sequence[
+        self.transforms: list[
             Callable[
                 [tuple[_TArray, _TTarget, DatumMetadata]],
                 tuple[_TArray, _TTarget, DatumMetadata],
             ]
         ] = []
+        self._image_transforms: list[Callable[[_TArray], _TArray]] = []
+        self._tuple_only_transforms: list[
+            Callable[
+                [tuple[_TArray, _TTarget, DatumMetadata]],
+                tuple[_TArray, _TTarget, DatumMetadata],
+            ]
+        ] = []
+        self._lazy: bool = False
         transforms = transforms if isinstance(transforms, Sequence) else [transforms] if transforms else []
         for transform in transforms:
             sig = inspect.signature(transform)
@@ -89,9 +99,27 @@ class BaseDataset(Dataset[tuple[_TArray, _TTarget, DatumMetadata]]):
                     transform,
                 )
                 self.transforms.append(transform)
+                self._tuple_only_transforms.append(transform)
             else:
                 transform = cast(Callable[[_TArray], _TArray], transform)
+                self._image_transforms.append(transform)
                 self.transforms.append(self._wrap_transform(transform))
+
+    @property
+    def lazy(self) -> bool:
+        """Whether ``__getitem__`` returns a :class:`LazyArray` for the image."""
+        return self._lazy
+
+    @lazy.setter
+    def lazy(self, value: bool) -> None:
+        if value and getattr(self, "_tuple_only_transforms", None):
+            warnings.warn(
+                "lazy=True with tuple-style transforms forces image materialization "
+                "on each access; only image-only transforms remain deferred.",
+                UserWarning,
+                stacklevel=2,
+            )
+        self._lazy = bool(value)
 
     def _wrap_transform(
         self, transform: Callable[[_TArray], _TArray]
@@ -108,7 +136,27 @@ class BaseDataset(Dataset[tuple[_TArray, _TTarget, DatumMetadata]]):
         return wrapper
 
     def _transform(self, datum: tuple[_TArray, _TTarget, DatumMetadata]) -> tuple[_TArray, _TTarget, DatumMetadata]:
-        """Function to transform the image prior to returning based on parameters passed in."""
+        """Apply the transform pipeline.
+
+        Eager (``self._lazy=False``): runs ``self.transforms`` in order.
+
+        Lazy + image-only transforms only: returns the datum unchanged; the
+        image-only transforms ride along inside the :class:`LazyArray`'s
+        ``pending`` and execute at materialization.
+
+        Lazy + tuple-style transforms present: materializes the image and runs
+        the full ``self.transforms`` pipeline. Tuple transforms see a real
+        ndarray (not a ``LazyArray``), matching the lazy-setter warning's
+        promise that tuple transforms force materialization.
+        """
+        if not self._lazy:
+            for transform in self.transforms:
+                datum = transform(datum)
+            return datum
+        if not self._tuple_only_transforms:
+            return datum
+        img, target, meta = datum
+        datum = (cast(_TArray, np.asarray(img)), target, meta)
         for transform in self.transforms:
             datum = transform(datum)
         return datum
@@ -242,6 +290,28 @@ class BaseDownloadedDataset(
         _id = metadata.pop("id", index)
         return DatumMetadata(id=_id, **metadata)
 
+    def _get_image(self, path: str) -> _TArray:
+        """Return the image for ``path``. Yields a :class:`LazyArray` when ``self._lazy``.
+
+        Pending image-only transforms are only attached when the pipeline has no
+        tuple-style transforms; otherwise ``_transform`` materializes and runs
+        ``self.transforms`` (which already includes the wrapped image-only
+        transforms), and attaching them to ``pending`` would double-apply.
+        """
+        mixin = cast(BaseDatasetMixin[_TArray], self)
+        if self._lazy:
+            pending = None if self._tuple_only_transforms else self._image_transforms or None
+            return cast(
+                _TArray,
+                LazyArray(
+                    path,
+                    loader=cast(Callable[[str], NDArray[Any]], mixin._read_file),
+                    shape_loader=mixin._read_shape,
+                    pending=cast("Sequence[Callable[[NDArray[Any]], NDArray[Any]]] | None", pending),
+                ),
+            )
+        return mixin._read_file(path)
+
     def __len__(self) -> int:
         return self.size
 
@@ -272,7 +342,7 @@ class BaseICDataset(
         label = self._targets[index]
         score = self._one_hot_encode(label)
         # Get the image
-        img = self._read_file(self._filepaths[index])
+        img = self._get_image(self._filepaths[index])
 
         img_metadata = {key: val[index] for key, val in self._datum_metadata.items()}
 
@@ -306,8 +376,8 @@ class BaseODDataset(
         # Grab the bounding boxes and labels from the annotations
         annotation = cast(_TAnnotation, self._targets[index])
         boxes, labels, additional_metadata = self._read_annotations(annotation)
-        # Get the image
-        img = self._read_file(self._filepaths[index])
+        # Get the image (LazyArray when self._lazy)
+        img = self._get_image(self._filepaths[index])
         img_size = img.shape
         # Adjust labels if necessary
         if self._bboxes_per_size and boxes:
@@ -353,6 +423,21 @@ class BaseDatasetNumpyMixin(BaseDatasetMixin[NumpyArray]):
 
     def _read_file(self, path: str) -> NumpyArray:
         return np.array(Image.open(path)).transpose(2, 0, 1)
+
+    def _read_shape(self, path: str) -> tuple[int, ...]:
+        """Read (C, H, W) without decoding pixel data.
+
+        Falls back to decoding the file via ``_read_file`` when the path is
+        not a real image file (e.g. integer-index strings used by in-memory
+        datasets like MNIST/CIFAR).
+        """
+        try:
+            with Image.open(path) as im:
+                channels = len(im.getbands())
+                w, h = im.size
+        except (FileNotFoundError, OSError, ValueError):
+            return self._read_file(path).shape
+        return (channels, h, w)
 
 
 NumpyImageTransform = Callable[[NumpyArray], NumpyArray]
