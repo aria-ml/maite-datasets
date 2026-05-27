@@ -45,8 +45,15 @@ class BaseDatasetReader(Generic[_TDataset], ABC):
         pass
 
     @abstractmethod
-    def create_dataset(self) -> _TDataset:
-        """Create the format-specific dataset implementation."""
+    def create_dataset(self, lazy: bool = False) -> _TDataset:
+        """Create the format-specific dataset implementation.
+
+        Parameters
+        ----------
+        lazy : bool, default False
+            When True, the returned dataset defers per-item image decode
+            until first numpy access (see :class:`maite_datasets._lazy.LazyArray`).
+        """
         pass
 
     @abstractmethod

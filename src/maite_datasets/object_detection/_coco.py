@@ -9,9 +9,9 @@ from typing import Any
 import maite.protocols.object_detection as od
 import numpy as np
 from maite.protocols import DatasetMetadata, DatumMetadata
-from PIL import Image
 
 from maite_datasets._base import BaseDataset, ObjectDetectionTargetTuple
+from maite_datasets._lazy import LazyArray, pil_rgb_chw_load, pil_rgb_chw_shape
 from maite_datasets._reader import BaseDatasetReader
 
 
@@ -131,9 +131,16 @@ class COCODatasetReader(BaseDatasetReader[od.Dataset]):
         """Mapping from class index to class name."""
         return self._index2label
 
-    def create_dataset(self) -> od.Dataset:
-        """Create COCO dataset implementation."""
-        return COCODataset(self)
+    def create_dataset(self, lazy: bool = False) -> od.Dataset:
+        """Create COCO dataset implementation.
+
+        Parameters
+        ----------
+        lazy : bool, default False
+            When True, each item's image is returned as a :class:`LazyArray`
+            that defers PIL decode until first numpy access.
+        """
+        return COCODataset(self, lazy=lazy)
 
     def _validate_format_specific(self) -> tuple[list[str], dict[str, Any]]:
         """Validate COCO format specific files and structure."""
@@ -201,11 +208,22 @@ class COCODatasetReader(BaseDatasetReader[od.Dataset]):
 
 
 class COCODataset(BaseDataset):
-    """Internal COCO dataset implementation."""
+    """Internal COCO dataset implementation.
 
-    def __init__(self, reader: COCODatasetReader) -> None:
+    Parameters
+    ----------
+    reader : COCODatasetReader
+        Reader providing image paths and parsed annotations.
+    lazy : bool, default False
+        When True, the image element of each datum is returned as a
+        :class:`LazyArray` that defers PIL decode until first numpy access.
+        Useful for metadata-only iteration over large image folders.
+    """
+
+    def __init__(self, reader: COCODatasetReader, lazy: bool = False) -> None:
         self._reader = reader
         self._image_ids = list(reader._image_id_to_info.keys())
+        self.lazy = lazy
 
         self.root = reader.dataset_path
         self.images_path = reader._images_path
@@ -224,10 +242,12 @@ class COCODataset(BaseDataset):
         image_id = self._image_ids[index]
         image_info = self._reader._image_id_to_info[image_id]
 
-        # Load image
+        # Load image (lazy when self.lazy)
         image_path = self._reader._images_path / image_info["file_name"]
-        image = np.array(Image.open(image_path).convert("RGB"))
-        image = np.transpose(image, (2, 0, 1))  # Convert to CHW format
+        if self.lazy:
+            image = LazyArray(str(image_path), loader=pil_rgb_chw_load, shape_loader=pil_rgb_chw_shape)
+        else:
+            image = pil_rgb_chw_load(image_path)
 
         # Get annotations for this image
         annotations = self._reader.image_id_to_annotations.get(image_id, [])

@@ -10,9 +10,9 @@ from typing import Any
 import maite.protocols.object_detection as od
 import numpy as np
 from maite.protocols import DatasetMetadata, DatumMetadata
-from PIL import Image
 
 from maite_datasets._base import BaseDataset, ObjectDetectionTargetTuple
+from maite_datasets._lazy import LazyArray, pil_rgb_chw_load, pil_rgb_chw_shape
 from maite_datasets._reader import BaseDatasetReader
 
 
@@ -122,9 +122,16 @@ class YOLODatasetReader(BaseDatasetReader[od.Dataset]):
         """Mapping from class index to class name."""
         return self._index2label
 
-    def create_dataset(self) -> od.Dataset:
-        """Create YOLO dataset implementation."""
-        return YOLODataset(self)
+    def create_dataset(self, lazy: bool = False) -> od.Dataset:
+        """Create YOLO dataset implementation.
+
+        Parameters
+        ----------
+        lazy : bool, default False
+            When True, each item's image is returned as a :class:`LazyArray`
+            that defers PIL decode until first numpy access.
+        """
+        return YOLODataset(self, lazy=lazy)
 
     def _validate_format_specific(self) -> tuple[list[str], dict[str, Any]]:
         """Validate YOLO format specific files and structure."""
@@ -216,10 +223,22 @@ class YOLODatasetReader(BaseDatasetReader[od.Dataset]):
 
 
 class YOLODataset(BaseDataset):
-    """Internal YOLO dataset implementation."""
+    """Internal YOLO dataset implementation.
 
-    def __init__(self, reader: YOLODatasetReader) -> None:
+    Parameters
+    ----------
+    reader : YOLODatasetReader
+        Reader providing image paths and parsed label files.
+    lazy : bool, default False
+        When True, the image element of each datum is returned as a
+        :class:`LazyArray` that defers PIL decode until first numpy access.
+        Box scaling uses the cheap PIL header probe so OD targets resolve
+        without pixel decode.
+    """
+
+    def __init__(self, reader: YOLODatasetReader, lazy: bool = False) -> None:
         self._reader = reader
+        self.lazy = lazy
 
         self.root = reader.dataset_path
         self.images_path = reader._images_path
@@ -237,10 +256,12 @@ class YOLODataset(BaseDataset):
     def __getitem__(self, index: int) -> tuple[od.InputType, od.ObjectDetectionTarget, DatumMetadata]:
         image_path = self._reader._image_files[index]
 
-        # Load image
-        image = np.asarray(Image.open(image_path).convert("RGB"), dtype=np.uint8)
-        img_height, img_width = image.shape[:2]
-        image = np.transpose(image, (2, 0, 1))  # Convert to CHW format
+        # Load image (lazy when self.lazy); shape probed via PIL header without decode.
+        if self.lazy:
+            image = LazyArray(str(image_path), loader=pil_rgb_chw_load, shape_loader=pil_rgb_chw_shape)
+        else:
+            image = pil_rgb_chw_load(image_path)
+        _, img_height, img_width = image.shape
 
         # Load corresponding label file
         label_path = self._reader._labels_path / f"{image_path.stem}.txt"

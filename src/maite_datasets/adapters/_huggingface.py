@@ -13,6 +13,7 @@ from maite.protocols import DatasetMetadata, DatumMetadata
 
 from maite_datasets._base import BaseDataset, NumpyArray, ObjectDetectionTargetTuple
 from maite_datasets._bbox import BoundingBoxFormat, convert_to_xyxy, detect_bbox_format
+from maite_datasets._lazy import LazyArray
 from maite_datasets.protocols import HFArray, HFClassLabel, HFDataset, HFImage, HFList, HFValue
 from maite_datasets.wrappers._torch import TTarget
 
@@ -42,11 +43,26 @@ class HFObjectDetectionDatasetInfo(HFDatasetInfo):
 
 
 class HFBaseDataset(BaseDataset[NumpyArray, TTarget]):
-    """Base wrapper for Hugging Face datasets, handling common logic."""
+    """Base wrapper for Hugging Face datasets, handling common logic.
 
-    def __init__(self, hf_dataset: HFDataset, image_key: str, known_keys: set[str]) -> None:
+    Parameters
+    ----------
+    hf_dataset : HFDataset
+        Source HuggingFace dataset.
+    image_key : str
+        Feature key holding the image column.
+    known_keys : set[str]
+        Known top-level keys used by subclasses (image, label, objects, ...).
+    lazy : bool, default False
+        When True, ``__getitem__`` returns a :class:`LazyArray` for the image
+        slot; the underlying ``source[index][image_key]`` access and channel
+        conversion are deferred until materialization.
+    """
+
+    def __init__(self, hf_dataset: HFDataset, image_key: str, known_keys: set[str], lazy: bool = False) -> None:
         self.source = hf_dataset
         self._image_key = image_key
+        self.lazy = lazy
 
         # Add dataset metadata
         dataset_info_dict = hf_dataset.info.__dict__
@@ -85,6 +101,12 @@ class HFBaseDataset(BaseDataset[NumpyArray, TTarget]):
             datum_metadata[key] = item[key]
         return datum_metadata
 
+    def _image_for_index(self, index: int) -> Any:
+        """Return the image for ``index``. Wraps in :class:`LazyArray` when ``self.lazy``."""
+        if self.lazy:
+            return LazyArray(str(index), loader=lambda _p, i=index: self._get_image(i))
+        return self._get_image(index)
+
     @lru_cache(maxsize=64)  # Cache image conversions
     def _get_image(self, index: int) -> np.ndarray:
         """Get and process image with caching and optimized conversions."""
@@ -121,8 +143,8 @@ class HFBaseDataset(BaseDataset[NumpyArray, TTarget]):
 class HFImageClassificationDataset(HFBaseDataset[NumpyArray], ic.Dataset):
     """Wraps a Hugging Face dataset to comply with the ImageClassificationDataset protocol."""
 
-    def __init__(self, hf_dataset: HFDataset, image_key: str, label_key: str) -> None:
-        super().__init__(hf_dataset, image_key, known_keys={image_key, label_key})
+    def __init__(self, hf_dataset: HFDataset, image_key: str, label_key: str, lazy: bool = False) -> None:
+        super().__init__(hf_dataset, image_key, known_keys={image_key, label_key}, lazy=lazy)
         self._label_key = label_key
 
         # Pre-validate label feature
@@ -146,8 +168,8 @@ class HFImageClassificationDataset(HFBaseDataset[NumpyArray], ic.Dataset):
         if not 0 <= index < len(self.source):
             raise IndexError(f"Index {index} out of range for dataset of size {len(self.source)}")
 
-        # Process image
-        image = self._get_image(index)
+        # Process image (LazyArray when self.lazy)
+        image = self._image_for_index(index)
         label_int = self.source[index][self._label_key]
 
         # Process target
@@ -172,8 +194,9 @@ class HFObjectDetectionDataset(HFBaseDataset[ObjectDetectionTargetTuple], od.Dat
         bbox_key: str,
         label_key: str,
         bbox_format: Literal["xyxy", "xywh", "yolo", "auto"] = "auto",
+        lazy: bool = False,
     ) -> None:
-        super().__init__(hf_dataset, image_key, known_keys={image_key, objects_key})
+        super().__init__(hf_dataset, image_key, known_keys={image_key, objects_key}, lazy=lazy)
         self._objects_key = objects_key
         self._bbox_key = bbox_key
         self._label_key = label_key
@@ -344,8 +367,9 @@ class HFObjectDetectionDataset(HFBaseDataset[ObjectDetectionTargetTuple], od.Dat
         if not 0 <= index < len(self.source):
             raise IndexError(f"Index {index} out of range for dataset of size {len(self.source)}")
 
-        # Process image
-        image = self._get_image(index)
+        # Process image (LazyArray when self.lazy; shape access below will force
+        # materialization if boxes need scaling against image dimensions).
+        image = self._image_for_index(index)
         objects = self.source[index][self._objects_key]
 
         # Process target - convert bboxes to XYXY format
