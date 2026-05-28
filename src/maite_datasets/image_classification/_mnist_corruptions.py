@@ -187,7 +187,7 @@ def identity(x: NDArray[np.number]) -> NDArray[np.float32]:
 def gaussian_noise(x: NDArray[np.number], severity: int = 5) -> NDArray[np.float32]:
     c = [0.08, 0.12, 0.18, 0.26, 0.38][severity - 1]
 
-    x = x / 255.0
+    x = np.asarray(x, dtype=np.float64) / 255.0
     x = np.clip(x + np.random.normal(size=x.shape, scale=c), 0, 1) * 255
     return x.astype(np.float32)
 
@@ -211,7 +211,7 @@ def impulse_noise(x: NDArray[np.number], severity: int = 4) -> NDArray[np.float3
 def speckle_noise(x: NDArray[np.number], severity: int = 5) -> NDArray[np.float32]:
     c = [0.15, 0.2, 0.35, 0.45, 0.6][severity - 1]
 
-    x = x / 255.0
+    x = np.asarray(x, dtype=np.float64) / 255.0
     x = np.clip(x + x * np.random.normal(size=x.shape, scale=c), 0, 1) * 255
     return x.astype(np.float32)
 
@@ -296,7 +296,7 @@ def zoom_blur(x: NDArray[np.number], severity: int = 5) -> NDArray[np.float32]:
 def fog(x: NDArray[np.number], severity: int = 5) -> NDArray[np.float32]:
     c = [(1.5, 2), (2.0, 2), (2.5, 1.7), (2.5, 1.5), (3.0, 1.4)][severity - 1]
 
-    x = x / 255.0
+    x = np.asarray(x, dtype=np.float64) / 255.0
     max_val = x.max()
     x = x + c[0] * plasma_fractal(wibbledecay=c[1])[:28, :28]
     x = np.clip(x * max_val / (max_val + c[0]), 0, 1) * 255
@@ -359,7 +359,7 @@ def spatter(x: NDArray[np.number], severity: int = 4) -> NDArray[np.float32]:
 def contrast(x: NDArray[np.number], severity: int = 4) -> NDArray[np.float32]:
     c = [0.4, 0.3, 0.2, 0.1, 0.05][severity - 1]
 
-    x = x / 255.0
+    x = np.asarray(x, dtype=np.float64) / 255.0
     means = np.mean(x, axis=(1, 2), keepdims=True)
     x = np.clip((x - means) * c + means, 0, 1) * 255
     return x.astype(np.float32)
@@ -369,7 +369,7 @@ def contrast(x: NDArray[np.number], severity: int = 4) -> NDArray[np.float32]:
 def brightness(x: NDArray[np.number], severity: int = 5) -> NDArray[np.float32]:
     c = [0.1, 0.2, 0.3, 0.4, 0.5][severity - 1]
 
-    x = x / 255.0
+    x = np.asarray(x, dtype=np.float64) / 255.0
     x = np.clip(x + c, 0, 1) * 255
     return x.astype(np.float32)
 
@@ -378,7 +378,7 @@ def brightness(x: NDArray[np.number], severity: int = 5) -> NDArray[np.float32]:
 def saturate(x: NDArray[np.number], severity: int = 5) -> NDArray[np.float32]:
     c = [(0.3, 0), (0.1, 0), (2, 0), (5, 0.1), (20, 0.2)][severity - 1]
 
-    x = x / 255.0
+    x = np.asarray(x, dtype=np.float64) / 255.0
     x = np.clip(x * c[0] + c[1], 0, 1) * 255
     return x.astype(np.float32)
 
@@ -487,7 +487,7 @@ def shear(x: NDArray[np.number], severity: int = 2) -> NDArray[np.float32]:
     b3 = 13.5 * (1 - b1 - b2)
     aff = transform.AffineTransform(shear=c, translation=[a3, b3])
 
-    x = x / 255.0
+    x = np.asarray(x, dtype=np.float64) / 255.0
     out = np.array([transform.warp(img, inverse_map=aff) for img in x])
     out = np.clip(out, 0, 1) * 255
     return out.astype(np.float32)
@@ -508,7 +508,7 @@ def rotate(x: NDArray[np.number], severity: int = 2) -> NDArray[np.float32]:
     b3 = 13.5 * (1 - b1 - b2)
     aff = transform.AffineTransform(rotation=c, translation=[a3, b3])
 
-    x = x / 255.0
+    x = np.asarray(x, dtype=np.float64) / 255.0
     out = np.array([transform.warp(img, inverse_map=aff) for img in x])
     out = np.clip(out, 0, 1) * 255
     return out.astype(np.float32)
@@ -528,7 +528,7 @@ def scale(x: NDArray[np.number], severity: int = 3) -> NDArray[np.float32]:
     b3 = 13.5 * (1 - b1 - b2)
     aff = transform.AffineTransform(scale=c, translation=[a3, b3])
 
-    x = x / 255.0
+    x = np.asarray(x, dtype=np.float64) / 255.0
     out = np.array([transform.warp(img, inverse_map=aff) for img in x])
     out = np.clip(out, 0, 1) * 255
     return out.astype(np.float32)
@@ -542,14 +542,14 @@ def translate(x: NDArray[np.number], severity: int = 3) -> NDArray[np.float32]:
     dy = c * bit[1]
     aff = transform.AffineTransform(translation=[dx, dy])
 
-    x = x / 255.0
+    x = np.asarray(x, dtype=np.float64) / 255.0
     out = np.array([transform.warp(img, inverse_map=aff) for img in x])
     out = np.clip(out, 0, 1) * 255
     return out.astype(np.float32)
 
 
 def line(x: NDArray[np.number]) -> NDArray[np.float32]:
-    x = x / 255.0
+    x = np.asarray(x, dtype=np.float64) / 255.0
     c0 = np.random.randint(low=0, high=5)
     c1 = np.random.randint(low=22, high=27)
     r0, r1 = np.random.randint(low=0, high=27, size=2)
@@ -560,7 +560,7 @@ def line(x: NDArray[np.number]) -> NDArray[np.float32]:
 
 
 def dotted_line(x: NDArray[np.number]) -> NDArray[np.float32]:
-    x = x / 255.0
+    x = np.asarray(x, dtype=np.float64) / 255.0
     r0, r1 = np.random.randint(low=0, high=27, size=2)
     corruption = line_from_points(0, int(r0), 27, int(r1))
 
@@ -576,7 +576,7 @@ def dotted_line(x: NDArray[np.number]) -> NDArray[np.float32]:
 
 
 def zigzag(x: NDArray[np.number]) -> NDArray[np.float32]:
-    x = x / 255.0
+    x = np.asarray(x, dtype=np.float64) / 255.0
     # a, b are length and width of zigzags
     a = 2.0
     b = 2.0
@@ -632,7 +632,7 @@ def stripe(x: NDArray[np.number]) -> NDArray[np.float32]:
 
 # modified to handle a batch of images
 def canny_edges(x: NDArray[np.number]) -> NDArray[np.float32]:
-    x = x / 255.0
+    x = np.asarray(x, dtype=np.float64) / 255.0
 
     out = np.array([feature.canny(img) for img in x]) * 255
     return out.astype(np.float32)

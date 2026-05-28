@@ -367,14 +367,16 @@ class HFObjectDetectionDataset(HFBaseDataset[ObjectDetectionTargetTuple], od.Dat
         if not 0 <= index < len(self.source):
             raise IndexError(f"Index {index} out of range for dataset of size {len(self.source)}")
 
-        # Process image (LazyArray when self.lazy; shape access below will force
-        # materialization if boxes need scaling against image dimensions).
+        # Process image (LazyArray when self.lazy).
         image = self._image_for_index(index)
         objects = self.source[index][self._objects_key]
 
-        # Process target - convert bboxes to XYXY format
+        # Process target — convert bboxes to XYXY. Only NORMALIZED_* formats need
+        # the image dimensions; absolute formats convert without touching `image.shape`,
+        # which preserves laziness for cppe-5-style XYWH/XYXY data.
         raw_boxes = objects[self._bbox_key]
-        converted_boxes = self._convert_bboxes_to_xyxy(raw_boxes, image.shape)
+        image_shape = image.shape if self._bbox_format.is_normalized else (0, 0, 0)
+        converted_boxes = self._convert_bboxes_to_xyxy(raw_boxes, image_shape)
 
         labels = objects[self._label_key]
         scores = np.ones_like(labels, dtype=np.float32)
