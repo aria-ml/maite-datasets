@@ -177,3 +177,25 @@ class TestLazyODDataset:
         np.testing.assert_array_equal(np.asarray(lazy_img), eager_img)
         np.testing.assert_array_equal(np.asarray(lazy_tgt.boxes), np.asarray(eager_tgt.boxes))
         np.testing.assert_array_equal(np.asarray(lazy_tgt.labels), np.asarray(eager_tgt.labels))
+
+
+class TestLazyConstructorParam:
+    """The ``lazy`` constructor kwarg must set the property and yield LazyArrays."""
+
+    def test_ships_constructor_lazy(self, ship_fake):
+        ds = Ships(root=ship_fake, lazy=True)
+        assert ds.lazy is True
+        img, _, _ = ds[0]
+        assert isinstance(img, LazyArray)
+
+    def test_ships_constructor_default_eager(self, ship_fake):
+        ds = Ships(root=ship_fake)
+        assert ds.lazy is False
+        img, _, _ = ds[0]
+        assert isinstance(img, np.ndarray)
+
+    def test_milco_constructor_lazy(self, milco_fake):
+        ds = MILCO(root=milco_fake, image_set="train", lazy=True)
+        assert ds.lazy is True
+        img, _, _ = ds[0]
+        assert isinstance(img, LazyArray)

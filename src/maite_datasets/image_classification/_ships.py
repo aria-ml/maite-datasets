@@ -40,6 +40,10 @@ class Ships(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
         Class checks to see if data is already downloaded to ensure it does not create a duplicate download.
     verbose : bool, default False
         If True, outputs print statements.
+    lazy : bool, default False
+        When True, the image element of each datum is returned as a
+        :class:`LazyArray` that defers PIL decode until first numpy access.
+        Useful for metadata-only iteration over large image folders.
 
     Attributes
     ----------
@@ -83,6 +87,7 @@ class Ships(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
         transforms: NumpyImageClassificationTransform | Sequence[NumpyImageClassificationTransform] | None = None,
         download: bool = False,
         verbose: bool = False,
+        lazy: bool = False,
     ) -> None:
         super().__init__(
             root,
@@ -90,6 +95,7 @@ class Ships(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
             transforms,
             download,
             verbose,
+            lazy,
         )
         self._scenes: list[str] = self._load_scenes()
         self._remove_extraneous_json_file()

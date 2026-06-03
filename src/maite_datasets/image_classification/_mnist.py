@@ -76,6 +76,9 @@ class MNIST(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
         Class checks to see if data is already downloaded to ensure it does not create a duplicate download.
     verbose : bool, default False
         If True, outputs print statements.
+    lazy : bool, default False
+        Accepted for API consistency with the file-backed datasets. MNIST
+        decodes its data fully into memory, so lazy access is a no-op here.
 
     Attributes
     ----------
@@ -131,6 +134,7 @@ class MNIST(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
         transforms: NumpyImageClassificationTransform | Sequence[NumpyImageClassificationTransform] | None = None,
         download: bool = False,
         verbose: bool = False,
+        lazy: bool = False,
     ) -> None:
         self.corruption = corruption
         if self.corruption == "identity" and verbose:
@@ -145,6 +149,7 @@ class MNIST(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
             transforms,
             download,
             verbose,
+            lazy,
         )
 
     def _load_data_inner(self) -> tuple[list[str], list[int], dict[str, Any]]:

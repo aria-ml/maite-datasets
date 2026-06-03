@@ -219,8 +219,10 @@ class BaseDownloadedDataset(
         | None = None,
         download: bool = False,
         verbose: bool = False,
+        lazy: bool = False,
     ) -> None:
         super().__init__(transforms)
+        self.lazy = lazy
         self._root: Path = root.absolute() if isinstance(root, Path) else Path(root).absolute()
         self.image_set = image_set
         self._verbose = verbose

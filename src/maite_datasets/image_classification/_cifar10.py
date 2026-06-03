@@ -49,6 +49,9 @@ class CIFAR10(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
         Class checks to see if data is already downloaded to ensure it does not create a duplicate download.
     verbose : bool, default False
         If True, outputs print statements.
+    lazy : bool, default False
+        Accepted for API consistency with the file-backed datasets. CIFAR10
+        decodes its data fully into memory, so lazy access is a no-op here.
 
     Attributes
     ----------
@@ -97,6 +100,7 @@ class CIFAR10(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
         transforms: NumpyImageClassificationTransform | Sequence[NumpyImageClassificationTransform] | None = None,
         download: bool = False,
         verbose: bool = False,
+        lazy: bool = False,
     ) -> None:
         super().__init__(
             root,
@@ -104,6 +108,7 @@ class CIFAR10(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
             transforms,
             download,
             verbose,
+            lazy,
         )
 
     def _load_bin_data(self, data_folder: list[Path]) -> tuple[list[str], list[int], dict[str, Any]]:

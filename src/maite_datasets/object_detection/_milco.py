@@ -54,6 +54,10 @@ class MILCO(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str
         Class checks to see if data is already downloaded to ensure it does not create a duplicate download.
     verbose : bool, default False
         If True, outputs print statements.
+    lazy : bool, default False
+        When True, the image element of each datum is returned as a
+        :class:`LazyArray` that defers PIL decode until first numpy access.
+        Useful for metadata-only iteration over large image folders.
 
     Attributes
     ----------
@@ -122,6 +126,7 @@ class MILCO(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str
         transforms: NumpyObjectDetectionTransform | Sequence[NumpyObjectDetectionTransform] | None = None,
         download: bool = False,
         verbose: bool = False,
+        lazy: bool = False,
     ) -> None:
         super().__init__(
             root,
@@ -129,6 +134,7 @@ class MILCO(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str
             transforms,
             download,
             verbose,
+            lazy,
         )
         self._bboxes_per_size = True
 

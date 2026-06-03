@@ -131,6 +131,7 @@ class BaseVOCDataset(BaseDownloadedDataset[NumpyArray, NumpyObjectDetectionTarge
         transforms: NumpyObjectDetectionTransform | Sequence[NumpyObjectDetectionTransform] | None = None,
         download: bool = False,
         verbose: bool = False,
+        lazy: bool = False,
     ) -> None:
         self.year = year
         self._resource_index = self._get_year_image_set_index(year, image_set)
@@ -140,6 +141,7 @@ class BaseVOCDataset(BaseDownloadedDataset[NumpyArray, NumpyObjectDetectionTarge
             transforms,
             download,
             verbose,
+            lazy,
         )
 
     def _get_dataset_dir(self) -> Path:
@@ -458,6 +460,10 @@ class VOCDetection(
         Class checks to see if data is already downloaded to ensure it does not create a duplicate download.
     verbose : bool, default False
         If True, outputs print statements.
+    lazy : bool, default False
+        When True, the image element of each datum is returned as a
+        :class:`LazyArray` that defers PIL decode until first numpy access.
+        Useful for metadata-only iteration over large image folders.
 
     Attributes
     ----------
