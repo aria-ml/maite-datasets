@@ -1,5 +1,10 @@
 # Changelog for maite-datasets
 
+## v0.0.13
+
+- [feat] Add lazy parameter to datasets which defer image loading until access
+- [test] Fix typecheck and remove unit test dependencies on live network
+
 ## v0.0.12
 
 - [impr] Transform MNIST corruptions programmatically
