@@ -81,19 +81,19 @@ class AntiUAVDetection(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, lis
     # Need to run the sha256 on the files and then store that
     _resources = [
         DataLocation(
-            url="https://drive.usercontent.google.com/download?id=1RVsSGPUKTdmoyoPTBTWwroyulLek1eTj&export=download&authuser=0&confirm=t&uuid=6bca4f94-a242-4bc2-9663-fb03cd94ef2c&at=APcmpox0--NroQ_3bqeTFaJxP7Pw%3A1746552902927",
+            url="https://drive.google.com/uc?export=download&id=1RVsSGPUKTdmoyoPTBTWwroyulLek1eTj",
             filename="train.zip",
             md5=False,
             checksum="14f927290556df60e23cedfa80dffc10dc21e4a3b6843e150cfc49644376eece",
         ),
         DataLocation(
-            url="https://drive.usercontent.google.com/download?id=1333uEQfGuqTKslRkkeLSCxylh6AQ0X6n&export=download&authuser=0&confirm=t&uuid=c2ad2f01-aca8-4a85-96bb-b8ef6e40feea&at=APcmpozY-8bhk3nZSFaYbE8rq1Fi%3A1746551543297",
+            url="https://drive.google.com/uc?export=download&id=1333uEQfGuqTKslRkkeLSCxylh6AQ0X6n",
             filename="val.zip",
             md5=False,
             checksum="238be0ceb3e7c5be6711ee3247e49df2750d52f91f54f5366c68bebac112ebf8",
         ),
         DataLocation(
-            url="https://drive.usercontent.google.com/download?id=1L1zeW1EMDLlXHClSDcCjl3rs_A6sVai0&export=download&authuser=0&confirm=t&uuid=5a1d7650-d8cd-4461-8354-7daf7292f06c&at=APcmpozLQC1CuP-n5_UX2JnP53Zo%3A1746551676177",
+            url="https://drive.google.com/uc?export=download&id=1L1zeW1EMDLlXHClSDcCjl3rs_A6sVai0",
             filename="test.zip",
             md5=False,
             checksum="a671989a01cff98c684aeb084e59b86f4152c50499d86152eb970a9fc7fb1cbe",

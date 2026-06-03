@@ -3,6 +3,7 @@ from __future__ import annotations
 __all__ = []
 
 import hashlib
+import re
 import tarfile
 import zipfile
 from pathlib import Path
@@ -45,6 +46,26 @@ def _download_dataset(url: str, file_path: Path, timeout: int = 60, verbose: boo
         )
         response = session.get(url, stream=True, timeout=timeout)
         response.raise_for_status()
+
+        # Large Google Drive files return an HTML "can't scan for viruses" warning page
+        # instead of the file. The page is a <form> whose hidden inputs carry the confirm
+        # token; re-request the form action with those inputs (the cookie set on this
+        # first response is what lets the resubmission serve the real bytes). Note this
+        # only works when the resource URL is the drive.google.com/uc?export=download&id=
+        # form -- a pre-confirmed drive.usercontent.google.com/...&confirm=t URL loops on
+        # the warning page instead. If Google changes this form layout and this proves
+        # fragile, swap to the `gdown` library which tracks these changes.
+        if "text/html" in response.headers.get("content-type", ""):
+            action = re.search(r'id="download-form" action="([^"]+)"', response.text)
+            params = dict(re.findall(r'name="([^"]+)" value="([^"]*)"', response.text))
+            if action is not None:
+                # Drop the session's "Referer: google.com" header on the resubmit -- with it
+                # present, Google re-serves the warning page instead of the file bytes.
+                # (requests removes a header whose value is None.)
+                response = session.get(
+                    action.group(1), params=params, headers={"Referer": None}, stream=True, timeout=timeout
+                )
+                response.raise_for_status()
     except requests.exceptions.HTTPError as e:
         raise RuntimeError(f"{error_msg.format(url, e.response.status_code, e.response.reason)}") from e
     except requests.exceptions.RequestException as e:
