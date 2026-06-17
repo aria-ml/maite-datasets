@@ -212,9 +212,9 @@ class TestUtilityFunctions:
         mock_feature.feature = mock_value
 
         with patch("maite_datasets.adapters._huggingface.isinstance") as mock_isinstance:
-            mock_isinstance.side_effect = lambda obj, types: type(obj).__name__ in [
-                t.__name__ for t in (types if isinstance(types, tuple) else [types])
-            ]
+            mock_isinstance.side_effect = lambda obj, types: (
+                type(obj).__name__ in [t.__name__ for t in (types if isinstance(types, tuple) else [types])]
+            )
             assert is_bbox(mock_feature)
 
     def test_is_bbox_false(self):
@@ -230,9 +230,9 @@ class TestUtilityFunctions:
         type(mock_feature).__name__ = "HFClassLabel"
 
         with patch("maite_datasets.adapters._huggingface.isinstance") as mock_isinstance:
-            mock_isinstance.side_effect = lambda obj, types: type(obj).__name__ in [
-                t.__name__ for t in (types if isinstance(types, tuple) else [types])
-            ]
+            mock_isinstance.side_effect = lambda obj, types: (
+                type(obj).__name__ in [t.__name__ for t in (types if isinstance(types, tuple) else [types])]
+            )
             assert is_label(mock_feature)
 
     def test_find_od_keys_success(self):
@@ -256,9 +256,9 @@ class TestUtilityFunctions:
             patch("maite_datasets.adapters._huggingface.is_label", side_effect=mock_is_label),
             patch("maite_datasets.adapters._huggingface.isinstance") as mock_isinstance,
         ):
-            mock_isinstance.side_effect = lambda obj, types: type(obj).__name__ in [
-                t.__name__ for t in (types if isinstance(types, tuple) else [types])
-            ]
+            mock_isinstance.side_effect = lambda obj, types: (
+                type(obj).__name__ in [t.__name__ for t in (types if isinstance(types, tuple) else [types])]
+            )
 
             bbox_key, label_key = find_od_keys(mock_feature)
             assert bbox_key == "bbox"
@@ -278,9 +278,9 @@ class TestGetDatasetInfo:
         mock_dataset.features = {"image": mock_image_feature, "label": mock_label_feature}
 
         with patch("maite_datasets.adapters._huggingface.isinstance") as mock_isinstance:
-            mock_isinstance.side_effect = lambda obj, types: type(obj).__name__ in [
-                t.__name__ for t in (types if isinstance(types, tuple) else [types])
-            ]
+            mock_isinstance.side_effect = lambda obj, types: (
+                type(obj).__name__ in [t.__name__ for t in (types if isinstance(types, tuple) else [types])]
+            )
 
             info = get_dataset_info(mock_dataset)
             assert isinstance(info, HFImageClassificationDatasetInfo)
@@ -301,9 +301,9 @@ class TestGetDatasetInfo:
             patch("maite_datasets.adapters._huggingface.isinstance") as mock_isinstance,
             patch("maite_datasets.adapters._huggingface.find_od_keys", return_value=("bbox", "label")),
         ):
-            mock_isinstance.side_effect = lambda obj, types: type(obj).__name__ in [
-                t.__name__ for t in (types if isinstance(types, tuple) else [types])
-            ]
+            mock_isinstance.side_effect = lambda obj, types: (
+                type(obj).__name__ in [t.__name__ for t in (types if isinstance(types, tuple) else [types])]
+            )
 
             info = get_dataset_info(mock_dataset)
             assert isinstance(info, HFObjectDetectionDatasetInfo)

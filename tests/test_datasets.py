@@ -30,7 +30,7 @@ class TestMNIST:
         dataset = MNIST(root=str(mnist_npy))
         assert isinstance(dataset._targets, list)
         assert isinstance(dataset._targets[0], int)
-        assert len(dataset) == 50000
+        assert len(dataset) == 100
         img, *_ = dataset[0]
         assert img.shape == (1, 28, 28)
 
@@ -39,7 +39,7 @@ class TestMNIST:
         dataset = MNIST(root=mnist_npy, image_set="base")
         assert isinstance(dataset._targets, list)
         assert isinstance(dataset._targets[0], int)
-        assert len(dataset) == 60000
+        assert len(dataset) == 120
         img, *_ = dataset[0]
         assert img.shape == (1, 28, 28)
 
@@ -54,7 +54,7 @@ class TestMNIST:
             dataset = MNIST(root=mnist_npy, image_set="test", corruption=corruption, verbose=False)
             assert isinstance(dataset._targets, list)
             assert isinstance(dataset._targets[0], int)
-            assert len(dataset) == 10000
+            assert len(dataset) == 20
             img, *_ = dataset[0]
             assert img.shape == (1, 28, 28)
             if corruption == "identity":
@@ -71,7 +71,7 @@ class TestShipDataset:
         dataset = Ships(root=str(ship_fake))
         assert isinstance(dataset._targets, list)
         assert isinstance(dataset._targets[0], int)
-        assert len(dataset) == 4000
+        assert len(dataset) == 100
         img, *_ = dataset[0]
         assert img.shape == (3, 10, 10)
         assert dataset._datum_metadata != {}
@@ -87,7 +87,7 @@ class TestCIFAR10:
         dataset = CIFAR10(root=cifar_fake)
         assert isinstance(dataset._targets, list)
         assert isinstance(dataset._targets[0], int)
-        assert len(dataset) == 50000
+        assert len(dataset) == 100
         img, *_ = dataset[0]
         assert img.shape == (3, 32, 32)
         assert dataset._datum_metadata != {}
@@ -98,7 +98,7 @@ class TestCIFAR10:
         dataset = CIFAR10(root=cifar_fake, image_set="base")
         assert isinstance(dataset._targets, list)
         assert isinstance(dataset._targets[0], int)
-        assert len(dataset) == 60000
+        assert len(dataset) == 120
         img, *_ = dataset[0]
         assert img.shape == (3, 32, 32)
         assert dataset._datum_metadata != {}
@@ -109,7 +109,7 @@ class TestCIFAR10:
         dataset = CIFAR10(root=cifar_fake, image_set="test")
         assert isinstance(dataset._targets, list)
         assert isinstance(dataset._targets[0], int)
-        assert len(dataset) == 10000
+        assert len(dataset) == 20
         img, *_ = dataset[0]
         assert img.shape == (3, 32, 32)
         assert dataset._datum_metadata != {}

@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
-from random import choice
 from zipfile import ZipFile
 
 import numpy as np
@@ -73,17 +72,17 @@ def mnist_npy(tmp_path_factory):
     mnistc_temp = mnist_temp / "mnist_c" / "identity"
     mnistc_temp.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(3)
-    labels = np.concatenate([rng.choice(10, 10000), np.arange(10).repeat(4000)])
-    train = np.ones((50000, 28, 28)) * labels[:, np.newaxis, np.newaxis]
+    labels = np.concatenate([rng.choice(10, 80), np.arange(10).repeat(2)])
+    train = np.ones((100, 28, 28)) * labels[:, np.newaxis, np.newaxis]
     train[:, 13:16, 13:16] += 1
-    train[-5000:, 13:16, 13:16] += 1
+    train[-10:, 13:16, 13:16] += 1
 
     np.savez(
         mnist_temp / "mnist.npz",
         x_train=train,
-        x_test=train[:10000],
+        x_test=train[:20],
         y_train=labels,
-        y_test=labels[:10000],
+        y_test=labels[:20],
     )
     np.save(mnistc_temp / "train_images.npy", train[..., None], allow_pickle=False)
     np.save(mnistc_temp / "train_labels.npy", labels, allow_pickle=False)
@@ -97,8 +96,8 @@ def ship_fake(tmp_path_factory):
     ship_temp.mkdir(parents=True, exist_ok=True)
     scene_temp = temp / "ships" / "scenes"
     scene_temp.mkdir(parents=True, exist_ok=True)
-    labels = np.concatenate([np.ones(1000, dtype=np.uint8), np.zeros(3000, dtype=np.uint8)])
-    data = np.ones((4000, 10, 10, 3), dtype=np.uint8) * labels[:, np.newaxis, np.newaxis, np.newaxis]
+    labels = np.concatenate([np.ones(25, dtype=np.uint8), np.zeros(75, dtype=np.uint8)])
+    data = np.ones((100, 10, 10, 3), dtype=np.uint8) * labels[:, np.newaxis, np.newaxis, np.newaxis]
     for i in range(labels.size):
         image = Image.fromarray(data[i])
         image.save(ship_temp / f"{labels[i]}__abc__105_{i}.png")
@@ -109,13 +108,15 @@ def ship_fake(tmp_path_factory):
     yield temp
 
 
-@pytest.fixture
-def cifar_fake(tmp_path):
-    temp = tmp_path / "data"
-    temp.mkdir()
+@pytest.fixture(scope="session")
+def cifar_fake(tmp_path_factory):
+    temp = tmp_path_factory.mktemp("data")
     cifar_temp = temp / "cifar10" / "cifar-10-batches-bin"
     cifar_temp.mkdir(parents=True, exist_ok=True)
 
+    images_per_batch = 20
+    entry_size = 1 + 3072  # 1 label byte + 3072 image bytes (3 x 32 x 32)
+    rng = np.random.default_rng(0)
     for filename in [
         "data_batch_1.bin",
         "data_batch_2.bin",
@@ -124,13 +125,11 @@ def cifar_fake(tmp_path):
         "data_batch_5.bin",
         "test_batch.bin",
     ]:
-        with open(cifar_temp / filename, "wb") as file:
-            # Write 10000 images for each batch
-            for _ in range(10000):
-                # Write label
-                file.write(choice(range(10)).to_bytes(1, byteorder="big"))
-                # Write 3072 zeros
-                file.write(bytes(3072))
+        # Build the whole batch as a single buffer: random labels in column 0,
+        # zero image bytes elsewhere, then write in one call (no per-image loop).
+        batch = np.zeros((images_per_batch, entry_size), dtype=np.uint8)
+        batch[:, 0] = rng.integers(0, 10, size=images_per_batch, dtype=np.uint8)
+        (cifar_temp / filename).write_bytes(batch.tobytes())
     yield temp
 
 

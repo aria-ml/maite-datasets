@@ -35,7 +35,7 @@ class TestBaseDataset:
 
         monkeypatch.setattr(MNIST, "_resources", mock_resources(mnist_npy))
         datasetA = MNIST(root=mnist_npy, download=False, verbose=verbose)
-        assert len(datasetA) == 50000
+        assert len(datasetA) == 100
         img, *_ = datasetA[0]
         assert img.shape == (1, 28, 28)
         if verbose:
