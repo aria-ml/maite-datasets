@@ -156,7 +156,6 @@ def _ensure_exists(
     if not check_path.exists() and download:
         _print(f"Downloading {filename} from {url}", verbose)
         _download_dataset(url, check_path, verbose=verbose)
-        print(check_path, check_path.exists(), check_path.stat().st_size)
         if not _validate_file(check_path, checksum, md5):
             raise Exception("File checksum mismatch. Remove current file and retry download.")
 
