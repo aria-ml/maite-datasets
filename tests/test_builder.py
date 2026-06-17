@@ -154,3 +154,14 @@ class TestDatasetFactoryFunctions:
         np_bboxes = [[np.array(box) for box in bbox] for bbox in bboxes]
         ds = to_object_detection_dataset(np_images, np_labels, np_bboxes, None, classes)
         assert len(ds) == 10
+
+    def test_object_detection_scores_are_independent_one_hot(self, images, classes):
+        # Regression: multiple detections per image must each get their own one-hot
+        # row; a shared inner list would set every row's columns identically.
+        labels = [[0, 2, 1]] * 10
+        bboxes = [[(0.0, 0.0, 4.0, 4.0)] * 3] * 10
+        ds = to_object_detection_dataset(images, labels, bboxes, None, classes)
+        scores = np.asarray(ds[0][1].scores)
+        assert scores.shape == (3, len(classes))
+        assert np.array_equal(np.argmax(scores, axis=1), [0, 2, 1])
+        assert np.array_equal(scores.sum(axis=1), np.ones(3))

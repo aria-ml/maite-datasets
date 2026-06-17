@@ -96,10 +96,11 @@ def test_validate_dataset_type():
 
 
 def test_validate_dataset_metadata():
-    """Tests for _validate_dataset_type function."""
-    assert ValidationMessages.DATASET_METADATA in _validate_dataset_metadata([])
-    assert ValidationMessages.DATASET_METADATA_TYPE in _validate_dataset_metadata([])
-    assert ValidationMessages.DATASET_METADATA_FORMAT in _validate_dataset_metadata([])
+    """Tests for _validate_dataset_metadata function: one message per root cause."""
+    assert _validate_dataset_metadata([]) == [ValidationMessages.DATASET_METADATA]
+    assert _validate_dataset_metadata(make_dataset([], "not_a_dict")) == [ValidationMessages.DATASET_METADATA_TYPE]
+    no_id = make_dataset([], {"name": "no_id"})
+    assert _validate_dataset_metadata(no_id) == [ValidationMessages.DATASET_METADATA_FORMAT]
 
 
 def test_validate_datum_type():
@@ -155,6 +156,17 @@ def test_validate_datum_target_od(valid_od_target):
 
     bad_scores = ObjectDetectionTarget(valid_od_target.labels, valid_od_target.boxes, np.array([[[0.9]]]))
     assert ValidationMessages.DATUM_TARGET_OD_SCORES_TYPE in _validate_datum_target_od(bad_scores)
+
+    # Defensive: None attributes must report issues rather than crash on np.asarray.
+    none_attrs = ObjectDetectionTarget(None, None, None)
+    none_issues = _validate_datum_target_od(none_attrs)
+    assert ValidationMessages.DATUM_TARGET_OD_LABELS_TYPE in none_issues
+    assert ValidationMessages.DATUM_TARGET_OD_BOXES_TYPE in none_issues
+    assert ValidationMessages.DATUM_TARGET_OD_SCORES_TYPE in none_issues
+
+    # Defensive: a ragged (non-coercible) boxes value must report an issue, not raise.
+    ragged_boxes = ObjectDetectionTarget(valid_od_target.labels, [[1, 2, 3, 4], [1, 2]], valid_od_target.scores)
+    assert ValidationMessages.DATUM_TARGET_OD_BOXES_TYPE in _validate_datum_target_od(ragged_boxes)
 
 
 def test_validate_datum_target(valid_ic_target, valid_od_target):
@@ -213,7 +225,6 @@ def test_validate_dataset_raises_errors(valid_ic_dataset):
         validate_dataset(bad_dataset, "ic")
 
     assert ValidationMessages.DATASET_METADATA in str(excinfo.value)
-    assert ValidationMessages.DATASET_METADATA_FORMAT in str(excinfo.value)
     assert ValidationMessages.DATUM_IMAGE_TYPE in str(excinfo.value)
     assert ValidationMessages.DATUM_IMAGE_FORMAT in str(excinfo.value)
     assert ValidationMessages.DATUM_TARGET_IC_FORMAT in str(excinfo.value)

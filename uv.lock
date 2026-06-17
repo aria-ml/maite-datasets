@@ -1207,7 +1207,7 @@ type = [
 requires-dist = [
     { name = "av", marker = "extra == 'av'", specifier = ">=12.0.0" },
     { name = "defusedxml", specifier = ">=0.7.1" },
-    { name = "maite", specifier = ">=0.7" },
+    { name = "maite", specifier = ">=0.9.4" },
     { name = "numpy", specifier = ">=1.24.2" },
     { name = "opencv-python-headless", marker = "extra == 'opencv'", specifier = ">=4.10.0" },
     { name = "pillow", specifier = ">=10.3.0" },

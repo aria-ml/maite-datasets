@@ -8,6 +8,8 @@ from typing import Any, Generic, TypeVar
 import maite.protocols.image_classification as ic
 import maite.protocols.object_detection as od
 
+from maite_datasets._base import ReaderTransforms
+
 _logger = logging.getLogger(__name__)
 
 _TDataset = TypeVar("_TDataset", ic.Dataset, od.Dataset)
@@ -45,7 +47,7 @@ class BaseDatasetReader(Generic[_TDataset], ABC):
         pass
 
     @abstractmethod
-    def create_dataset(self, lazy: bool = False) -> _TDataset:
+    def create_dataset(self, lazy: bool = False, transforms: ReaderTransforms = None) -> _TDataset:
         """Create the format-specific dataset implementation.
 
         Parameters
@@ -53,6 +55,9 @@ class BaseDatasetReader(Generic[_TDataset], ABC):
         lazy : bool, default False
             When True, the returned dataset defers per-item image decode
             until first numpy access (see :class:`maite_datasets._lazy.LazyArray`).
+        transforms : ReaderTransforms, default None
+            Optional image-only or datum-tuple transform(s) applied to each datum
+            on access, following the same pipeline as the downloadable datasets.
         """
         pass
 

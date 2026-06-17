@@ -237,6 +237,24 @@ class TestCOCODatasetReader:
         assert "area" in ann_meta
         assert "iscrowd" in ann_meta
 
+    def test_dataset_applies_image_transform(self, temp_coco_dataset):
+        """Image-only transforms passed to create_dataset run on each datum."""
+        reader = COCODatasetReader(temp_coco_dataset)
+        baseline = np.asarray(reader.create_dataset()[0][0])
+        transformed = np.asarray(reader.create_dataset(transforms=lambda image: image + 1)[0][0])
+        np.testing.assert_array_equal(transformed, baseline + 1)
+
+    def test_dataset_applies_tuple_transform(self, temp_coco_dataset):
+        """Datum-tuple transforms passed to create_dataset run on each datum."""
+
+        def tag(datum: tuple):
+            image, target, metadata = datum
+            return image, target, {**metadata, "tagged": True}
+
+        reader = COCODatasetReader(temp_coco_dataset)
+        _, _, metadata = reader.create_dataset(transforms=tag)[0]
+        assert metadata["tagged"] is True
+
     def test_dataset_empty_annotations(self, temp_coco_dataset, sample_coco_data):
         """Test dataset with image having no annotations."""
         # Modify data to have image with no annotations
@@ -366,6 +384,13 @@ class TestYOLODatasetReader:
         assert "yolo_width" in ann_meta
         assert "yolo_height" in ann_meta
         assert "absolute_bbox" in ann_meta
+
+    def test_dataset_applies_image_transform(self, temp_yolo_dataset):
+        """Image-only transforms passed to create_dataset run on each datum."""
+        reader = YOLODatasetReader(temp_yolo_dataset)
+        baseline = np.asarray(reader.create_dataset()[0][0])
+        transformed = np.asarray(reader.create_dataset(transforms=lambda image: image + 1)[0][0])
+        np.testing.assert_array_equal(transformed, baseline + 1)
 
     def test_dataset_missing_label_file(self, temp_yolo_dataset):
         """Test dataset with missing label file."""

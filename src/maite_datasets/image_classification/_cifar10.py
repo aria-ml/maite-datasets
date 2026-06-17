@@ -112,10 +112,11 @@ class CIFAR10(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
         )
 
     def _load_bin_data(self, data_folder: list[Path]) -> tuple[list[str], list[int], dict[str, Any]]:
-        batch_nums = np.zeros(60000, dtype=np.uint8)
-        all_labels = np.zeros(60000, dtype=np.uint8)
-        all_images = np.zeros((60000, 3, 32, 32), dtype=np.uint8)
-        # Process each batch file, skipping .meta and .html files
+        images_list: list[NDArray[np.uint8]] = []
+        labels_list: list[NDArray[np.uint8]] = []
+        batch_list: list[NDArray[np.uint8]] = []
+        # Process each batch file in order (data_batch_1..5, then test_batch),
+        # accumulating rather than preallocating so any per-batch size works.
         for batch_file in data_folder:
             # Get batch parameters
             batch_type = "test" if "test" in batch_file.stem else "train"
@@ -125,11 +126,13 @@ class CIFAR10(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
             batch_images, batch_labels = self._unpack_batch_files(batch_file)
 
             # Stack data
-            num_images = batch_images.shape[0]
-            batch_start = batch_num * num_images
-            all_images[batch_start : batch_start + num_images] = batch_images
-            all_labels[batch_start : batch_start + num_images] = batch_labels
-            batch_nums[batch_start : batch_start + num_images] = batch_num
+            images_list.append(batch_images)
+            labels_list.append(batch_labels)
+            batch_list.append(np.full(batch_images.shape[0], batch_num, dtype=np.uint8))
+
+        all_images = np.concatenate(images_list, axis=0)
+        all_labels = np.concatenate(labels_list, axis=0)
+        batch_nums = np.concatenate(batch_list, axis=0)
 
         # Save data
         self._loaded_data = all_images
@@ -199,29 +202,14 @@ class CIFAR10(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
         # Load pickle data with latin1 encoding
         with file_path.open("rb") as f:
             buffer = np.frombuffer(f.read(), dtype=np.uint8)
-            # Each entry is 1 byte for label + 3072 bytes for image (3*32*32)
-            entry_size = 1 + 3072
-            num_entries = buffer.size // entry_size
-            # Extract labels (first byte of each entry)
-            labels = buffer[::entry_size]
-
-            # Extract image data and reshape to (N, 3, 32, 32)
-            images = np.zeros((num_entries, 3, 32, 32), dtype=np.uint8)
-            for i in range(num_entries):
-                # Skip the label byte and get image data for this entry
-                start_idx = i * entry_size + 1  # +1 to skip label
-                img_flat = buffer[start_idx : start_idx + 3072]
-
-                # The CIFAR format stores channels in blocks (all R, then all G, then all B)
-                # Each channel block is 1024 bytes (32x32)
-                red_channel = img_flat[0:1024].reshape(32, 32)
-                green_channel = img_flat[1024:2048].reshape(32, 32)
-                blue_channel = img_flat[2048:3072].reshape(32, 32)
-
-                # Stack the channels in the proper C×H×W format
-                images[i, 0] = red_channel  # Red channel
-                images[i, 1] = green_channel  # Green channel
-                images[i, 2] = blue_channel  # Blue channel
+        # Each entry is 1 byte for label + 3072 bytes for image (3*32*32), and the
+        # CIFAR format stores the image as three 1024-byte channel blocks (R, G, B),
+        # which is exactly the (3, 32, 32) C×H×W layout once reshaped.
+        entry_size = 1 + 3072
+        num_entries = buffer.size // entry_size
+        entries = buffer[: num_entries * entry_size].reshape(num_entries, entry_size)
+        labels = entries[:, 0]
+        images = entries[:, 1:].reshape(num_entries, 3, 32, 32)
         return images, labels
 
     def _read_file(self, path: str) -> NumpyArray:

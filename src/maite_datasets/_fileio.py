@@ -63,11 +63,13 @@ def _download_dataset(url: str, file_path: Path, timeout: int = 60, verbose: boo
                 # present, Google re-serves the warning page instead of the file bytes.
                 # (requests removes a header whose value is None.)
                 response = session.get(
-                    action.group(1), params=params, headers={"Referer": None}, stream=True, timeout=timeout
+                    action.group(1), params=params, headers={"Referer": ""}, stream=True, timeout=timeout
                 )
                 response.raise_for_status()
     except requests.exceptions.HTTPError as e:
-        raise RuntimeError(f"{error_msg.format(url, e.response.status_code, e.response.reason)}") from e
+        if e.response is not None:
+            raise RuntimeError(f"{error_msg.format(url, e.response.status_code, e.response.reason)}") from e
+        raise RuntimeError(f"{error_msg.format(url, 'Unknown error', str(e))}") from e
     except requests.exceptions.RequestException as e:
         raise ValueError(f"{error_msg.format(url, 'Unknown error', str(e))}") from e
 

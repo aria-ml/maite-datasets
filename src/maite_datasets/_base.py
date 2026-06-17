@@ -14,7 +14,7 @@ import numpy as np
 from maite.protocols import DatasetMetadata, DatumMetadata
 from maite.protocols import image_classification as ic
 from maite.protocols import object_detection as od
-from numpy.typing import NDArray
+from numpy.typing import ArrayLike, NDArray
 from PIL import Image
 
 from maite_datasets._fileio import _ensure_exists
@@ -33,7 +33,27 @@ _TRawTarget = TypeVar(
 )
 _TAnnotation = TypeVar("_TAnnotation", int, str, tuple[list[int], list[list[float]]])
 
+# Object detection targets. These use the functional ``namedtuple`` factory function so
+# the tuple works with TorchVision
 ObjectDetectionTargetTuple = namedtuple("ObjectDetectionTargetTuple", ["boxes", "labels", "scores"])
+
+
+# Multi-object tracking targets. A SingleFrameObjectTrackingTargetTuple is an
+# ObjectDetectionTargetTuple plus per-detection track_ids; a
+# MultiObjectTrackingTargetTuple holds the per-frame targets for one video as
+# its ``frame_tracks`` field. Both satisfy the MAITE multiobject_tracking
+# protocols structurally via attribute access. These use class-based NamedTuple
+# (rather than the functional ``namedtuple``) so the exported fields carry type
+# annotations.
+class SingleFrameObjectTrackingTargetTuple(NamedTuple):
+    boxes: ArrayLike
+    labels: ArrayLike
+    scores: ArrayLike
+    track_ids: ArrayLike
+
+
+class MultiObjectTrackingTargetTuple(NamedTuple):
+    frame_tracks: Sequence[SingleFrameObjectTrackingTargetTuple]
 
 
 class BaseDatasetMixin(Generic[_TArray]):
@@ -453,3 +473,11 @@ NumpyObjectDetectionDatumTransform = Callable[
 ]
 NumpyImageClassificationTransform = NumpyImageTransform | NumpyImageClassificationDatumTransform
 NumpyObjectDetectionTransform = NumpyImageTransform | NumpyObjectDetectionDatumTransform
+
+# Transform type accepted by reader-created datasets. Reader images satisfy the
+# ``Array`` protocol (numpy ndarray when eager, LazyArray when lazy), so the alias
+# is expressed against ``Array`` rather than a concrete array type.
+ReaderTransform = (
+    Callable[[Array], Array] | Callable[[tuple[Array, Any, DatumMetadata]], tuple[Array, Any, DatumMetadata]]
+)
+ReaderTransforms = ReaderTransform | Sequence[ReaderTransform] | None

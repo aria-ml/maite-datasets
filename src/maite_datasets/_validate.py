@@ -2,7 +2,7 @@ from __future__ import annotations
 
 __all__ = []
 
-from collections.abc import Sequence, Sized
+from collections.abc import Iterable, Sequence, Sized
 from typing import Any, Literal
 
 import numpy as np
@@ -28,7 +28,18 @@ class ValidationMessages:
     DATUM_TARGET_OD_LABELS_TYPE = "ObjectDetectionTarget labels must be one-dimensional (N,) arrays."
     DATUM_TARGET_OD_BOXES_TYPE = "ObjectDetectionTarget boxes must be two-dimensional (N, 4) arrays in xxyy format."
     DATUM_TARGET_OD_SCORES_TYPE = "ObjectDetectionTarget scores must be one (N,) or two-dimensional (N, M) arrays."
-    DATUM_TARGET_TYPE = "Target is not a valid ImageClassification or ObjectDetection target type."
+    DATUM_VIDEO_TYPE = "MultiObjectTracking inputs must be an iterable VideoStream of frames."
+    DATUM_VIDEO_FORMAT = "VideoStream frames must expose 3-dimensional (C, H, W) pixels."
+    DATUM_TARGET_MOT_TYPE = "MultiObjectTrackingDataset targets must have a 'frame_tracks' attribute."
+    DATUM_TARGET_MOT_FRAMES_TYPE = "MultiObjectTrackingTarget frame_tracks must be a sequence of frame targets."
+    DATUM_TARGET_MOT_FRAME_TYPE = (
+        "MultiObjectTracking frame targets must have 'boxes', 'labels', 'scores' and 'track_ids'."
+    )
+    DATUM_TARGET_MOT_BOXES_TYPE = "MultiObjectTracking frame boxes must be two-dimensional (N, 4) xxyy arrays."
+    DATUM_TARGET_MOT_TRACK_IDS_TYPE = (
+        "MultiObjectTracking frame track_ids must be one-dimensional (N,) integer arrays (-1 for untracked)."
+    )
+    DATUM_TARGET_TYPE = "Target is not a valid ImageClassification, ObjectDetection or MultiObjectTracking target."
     DATUM_METADATA_TYPE = "Datum metadata must be a dictionary."
     DATUM_METADATA_FORMAT = "Datum metadata must contain an 'id' key."
 
@@ -46,16 +57,23 @@ def _validate_dataset_type(dataset: Any) -> list[str]:
     return issues
 
 
+def _validate_id_mapping(value: Any, type_msg: str, format_msg: str) -> list[str]:
+    """Return a single message if ``value`` is not a dict, or lacks an 'id' key."""
+    if not isinstance(value, dict):
+        return [type_msg]
+    if "id" not in value:
+        return [format_msg]
+    return []
+
+
 def _validate_dataset_metadata(dataset: Any) -> list[str]:
-    issues = []
+    # Report a single message for the most specific root cause rather than stacking
+    # the missing/type/format messages for one underlying problem.
     if not hasattr(dataset, "metadata"):
-        issues.append(ValidationMessages.DATASET_METADATA)
-    metadata = getattr(dataset, "metadata", None)
-    if not isinstance(metadata, dict):
-        issues.append(ValidationMessages.DATASET_METADATA_TYPE)
-    if not isinstance(metadata, dict) or "id" not in metadata:
-        issues.append(ValidationMessages.DATASET_METADATA_FORMAT)
-    return issues
+        return [ValidationMessages.DATASET_METADATA]
+    return _validate_id_mapping(
+        dataset.metadata, ValidationMessages.DATASET_METADATA_TYPE, ValidationMessages.DATASET_METADATA_FORMAT
+    )
 
 
 def _validate_datum_type(datum: Any) -> list[str]:
@@ -89,54 +107,104 @@ def _validate_datum_target_ic(target: Any) -> list[str]:
     return issues
 
 
+def _safe_shape(value: Any) -> tuple[int, ...] | None:
+    """Return the array shape of ``value``, or ``None`` if it is missing or not array-like.
+
+    A ``None`` attribute or a ragged/non-coercible value would otherwise make
+    ``np.asarray`` raise, crashing validation instead of reporting an issue.
+    """
+    if value is None:
+        return None
+    try:
+        return np.asarray(value).shape
+    except (ValueError, TypeError):
+        return None
+
+
 def _validate_datum_target_od(target: Any) -> list[str]:
-    issues = []
     if not isinstance(target, ObjectDetectionTarget):
-        issues.append(ValidationMessages.DATUM_TARGET_OD_TYPE)
-    od_target: ObjectDetectionTarget | None = target if isinstance(target, ObjectDetectionTarget) else None
-    if od_target is None or len(np.asarray(od_target.labels).shape) != 1:
+        return [ValidationMessages.DATUM_TARGET_OD_TYPE]
+    issues = []
+    labels_shape = _safe_shape(target.labels)
+    boxes_shape = _safe_shape(target.boxes)
+    scores_shape = _safe_shape(target.scores)
+    if labels_shape is None or len(labels_shape) != 1:
         issues.append(ValidationMessages.DATUM_TARGET_OD_LABELS_TYPE)
-    if (
-        od_target is None
-        or len(np.asarray(od_target.boxes).shape) != 2
-        or (len(np.asarray(od_target.boxes).shape) == 2 and np.asarray(od_target.boxes).shape[1] != 4)
-    ):
+    if boxes_shape is None or len(boxes_shape) != 2 or boxes_shape[1] != 4:
         issues.append(ValidationMessages.DATUM_TARGET_OD_BOXES_TYPE)
-    if od_target is None or len(np.asarray(od_target.scores).shape) not in (1, 2):
+    if scores_shape is None or len(scores_shape) not in (1, 2):
         issues.append(ValidationMessages.DATUM_TARGET_OD_SCORES_TYPE)
     return issues
 
 
-def _detect_target_type(target: Any) -> Literal["ic", "od", "auto"]:
+def _validate_datum_video(video_input: Any) -> list[str]:
+    # A VideoStream is an iterable of frames, not a single (C, H, W) image array.
+    if isinstance(video_input, Array) or not isinstance(video_input, (Sequence, Iterable)):
+        return [ValidationMessages.DATUM_VIDEO_TYPE]
+    # Only peek at a frame when the stream is a re-indexable Sequence; consuming a
+    # one-shot iterator (or decoding a lazy video stream) just to validate is wasteful.
+    if isinstance(video_input, Sequence) and len(video_input) > 0:
+        pixels = getattr(video_input[0], "pixels", video_input[0])
+        if not isinstance(pixels, Array) or len(pixels.shape) != 3:
+            return [ValidationMessages.DATUM_VIDEO_FORMAT]
+    return []
+
+
+def _validate_datum_target_mot(target: Any) -> list[str]:
+    issues = []
+    frame_tracks = getattr(target, "frame_tracks", None)
+    if frame_tracks is None:
+        issues.append(ValidationMessages.DATUM_TARGET_MOT_TYPE)
+        return issues
+    if not isinstance(frame_tracks, Sequence):
+        issues.append(ValidationMessages.DATUM_TARGET_MOT_FRAMES_TYPE)
+        return issues
+    for frame in frame_tracks:
+        if not all(hasattr(frame, attr) for attr in ("boxes", "labels", "scores", "track_ids")):
+            issues.append(ValidationMessages.DATUM_TARGET_MOT_FRAME_TYPE)
+            break
+        boxes = np.asarray(frame.boxes)
+        if boxes.ndim != 2 or (boxes.size and boxes.shape[1] != 4):
+            issues.append(ValidationMessages.DATUM_TARGET_MOT_BOXES_TYPE)
+            break
+        track_ids = np.asarray(frame.track_ids)
+        if track_ids.ndim != 1 or (track_ids.size and not np.issubdtype(track_ids.dtype, np.integer)):
+            issues.append(ValidationMessages.DATUM_TARGET_MOT_TRACK_IDS_TYPE)
+            break
+    return issues
+
+
+def _detect_target_type(target: Any) -> Literal["ic", "od", "mot", "auto"]:
     if isinstance(target, Array):
         return "ic"
+    if hasattr(target, "frame_tracks"):
+        return "mot"
     if isinstance(target, ObjectDetectionTarget):
         return "od"
     return "auto"
 
 
-def _validate_datum_target(target: Any, target_type: Literal["ic", "od", "auto"]) -> list[str]:
+def _validate_datum_target(target: Any, target_type: Literal["ic", "od", "mot", "auto"]) -> list[str]:
     issues = []
     target_type = _detect_target_type(target) if target_type == "auto" else target_type
     if target_type == "ic":
         issues.extend(_validate_datum_target_ic(target))
     elif target_type == "od":
         issues.extend(_validate_datum_target_od(target))
+    elif target_type == "mot":
+        issues.extend(_validate_datum_target_mot(target))
     else:
         issues.append(ValidationMessages.DATUM_TARGET_TYPE)
     return issues
 
 
 def _validate_datum_metadata(metadata: Any) -> list[str]:
-    issues = []
-    if metadata is None or not isinstance(metadata, dict):
-        issues.append(ValidationMessages.DATUM_METADATA_TYPE)
-    if metadata is None or isinstance(metadata, dict) and "id" not in metadata:
-        issues.append(ValidationMessages.DATUM_METADATA_FORMAT)
-    return issues
+    return _validate_id_mapping(
+        metadata, ValidationMessages.DATUM_METADATA_TYPE, ValidationMessages.DATUM_METADATA_FORMAT
+    )
 
 
-def validate_dataset(dataset: Any, dataset_type: Literal["ic", "od", "auto"] = "auto") -> None:
+def validate_dataset(dataset: Any, dataset_type: Literal["ic", "od", "mot", "auto"] = "auto") -> None:
     """
     Validate a dataset for compliance with MAITE protocol.
 
@@ -144,7 +212,7 @@ def validate_dataset(dataset: Any, dataset_type: Literal["ic", "od", "auto"] = "
     ----------
     dataset: Any
         Dataset to validate.
-    dataset_type: "ic", "od", or "auto", default "auto"
+    dataset_type: "ic", "od", "mot", or "auto", default "auto"
         Dataset type, if known.
 
     Raises
@@ -160,10 +228,17 @@ def validate_dataset(dataset: Any, dataset_type: Literal["ic", "od", "auto"] = "
 
     is_seq = isinstance(datum, Sequence)
     datum_len = len(datum) if is_seq else 0
-    image = datum[0] if is_seq and datum_len > 0 else None
+    input_data = datum[0] if is_seq and datum_len > 0 else None
     target = datum[1] if is_seq and datum_len > 1 else None
     metadata = datum[2] if is_seq and datum_len > 2 else None
-    issues.extend(_validate_datum_image(image))
+
+    # Multi-object tracking inputs are VideoStreams, not (C, H, W) image arrays,
+    # so the input is validated against the video contract for that task.
+    effective_type = _detect_target_type(target) if dataset_type == "auto" else dataset_type
+    if effective_type == "mot":
+        issues.extend(_validate_datum_video(input_data))
+    else:
+        issues.extend(_validate_datum_image(input_data))
     issues.extend(_validate_datum_target(target, dataset_type))
     issues.extend(_validate_datum_metadata(metadata))
 

@@ -10,7 +10,7 @@ import maite.protocols.object_detection as od
 import numpy as np
 from maite.protocols import DatasetMetadata, DatumMetadata
 
-from maite_datasets._base import BaseDataset, ObjectDetectionTargetTuple
+from maite_datasets._base import BaseDataset, ObjectDetectionTargetTuple, ReaderTransforms
 from maite_datasets._lazy import LazyArray, pil_rgb_chw_load, pil_rgb_chw_shape
 from maite_datasets._reader import BaseDatasetReader
 
@@ -131,7 +131,7 @@ class COCODatasetReader(BaseDatasetReader[od.Dataset]):
         """Mapping from class index to class name."""
         return self._index2label
 
-    def create_dataset(self, lazy: bool = False) -> od.Dataset:
+    def create_dataset(self, lazy: bool = False, transforms: ReaderTransforms = None) -> od.Dataset:
         """Create COCO dataset implementation.
 
         Parameters
@@ -139,8 +139,10 @@ class COCODatasetReader(BaseDatasetReader[od.Dataset]):
         lazy : bool, default False
             When True, each item's image is returned as a :class:`LazyArray`
             that defers PIL decode until first numpy access.
+        transforms : ReaderTransforms, default None
+            Optional image-only or datum-tuple transform(s) applied to each datum.
         """
-        return COCODataset(self, lazy=lazy)
+        return COCODataset(self, lazy=lazy, transforms=transforms)
 
     def _validate_format_specific(self) -> tuple[list[str], dict[str, Any]]:
         """Validate COCO format specific files and structure."""
@@ -218,9 +220,13 @@ class COCODataset(BaseDataset):
         When True, the image element of each datum is returned as a
         :class:`LazyArray` that defers PIL decode until first numpy access.
         Useful for metadata-only iteration over large image folders.
+    transforms : ReaderTransforms, default None
+        Optional image-only or datum-tuple transform(s) applied to each datum
+        on access via the inherited transform pipeline.
     """
 
-    def __init__(self, reader: COCODatasetReader, lazy: bool = False) -> None:
+    def __init__(self, reader: COCODatasetReader, lazy: bool = False, transforms: ReaderTransforms = None) -> None:
+        super().__init__(transforms)
         self._reader = reader
         self._image_ids = list(reader._image_id_to_info.keys())
         self.lazy = lazy
@@ -310,4 +316,4 @@ class COCODataset(BaseDataset):
             }
         )
 
-        return image, target, datum_metadata
+        return self._transform((image, target, datum_metadata))
