@@ -6,7 +6,7 @@ requires-python = ">=3.10"
 dynamic = ["version"]
 dependencies = [
     "defusedxml>=0.7.1",
-    "maite>=0.7,<0.9",
+    "maite>=0.7",
     "numpy>=1.24.2",
     "pillow>=10.3.0",
     "requests>=2.32.3",
@@ -18,7 +18,6 @@ license = "MIT"
 authors = [
   { name = "Andrew Weng", email = "andrew.weng@ariacoustics.com" },
   { name = "Ryan Wood", email = "ryan.wood@ariacoustics.com" },
-  { name = "Shaun Jullens", email = "shaun.jullens@ariacoustics.com" },
 ]
 classifiers = [
    "Development Status :: 4 - Beta",
@@ -35,6 +34,7 @@ classifiers = [
 [project.optional-dependencies]
 tqdm = ["tqdm>=4.66"]
 opencv = ["opencv-python-headless>=4.10.0"]
+av = ["av>=12.0.0"]
 
 [dependency-groups]
 base = [
@@ -44,7 +44,7 @@ base = [
 ]
 more = [
   "torch>=2.2.0",
-  "torchvision>=0.17.0",
+  "torchvision>=0.17.0,!=0.27.1+df56172",
   "tqdm>=4.66",
 ]
 lint = [
@@ -108,6 +108,7 @@ fail_under = 90
 
 [tool.codespell]
 skip = './*env*,./output,uv.lock'
+ignore-words-list = ["mot"]
 
 [tool.ruff]
 exclude = [
