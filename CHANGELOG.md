@@ -1,5 +1,13 @@
 # Changelog for maite-datasets
 
+## v0.0.14
+
+- [feat] Add support for MAITE MOT datasets
+- [fix] Address OD dataset validation error for datum 0 with no targets
+- [deps] Bump MAITE to v0.9.4 and add pyAV dependency
+- [test] Slim down unnecessary test fixtures
+- [misc] Remove extraneous print statements
+
 ## v0.0.13
 
 - [feat] Add lazy parameter to datasets which defer image loading until access
