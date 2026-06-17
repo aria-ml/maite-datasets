@@ -2,7 +2,7 @@
 
 from maite_datasets._builder import (
     to_image_classification_dataset,
-    to_multi_object_tracking_dataset,
+    to_multiobject_tracking_dataset,
     to_object_detection_dataset,
 )
 from maite_datasets._collate import collate_as_list, collate_as_numpy, collate_as_torch
@@ -15,7 +15,7 @@ __all__ = [
     "collate_as_torch",
     "create_dataset_reader",
     "to_image_classification_dataset",
-    "to_multi_object_tracking_dataset",
+    "to_multiobject_tracking_dataset",
     "to_object_detection_dataset",
     "validate_dataset",
 ]

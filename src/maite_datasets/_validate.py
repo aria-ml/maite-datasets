@@ -28,18 +28,18 @@ class ValidationMessages:
     DATUM_TARGET_OD_LABELS_TYPE = "ObjectDetectionTarget labels must be one-dimensional (N,) arrays."
     DATUM_TARGET_OD_BOXES_TYPE = "ObjectDetectionTarget boxes must be two-dimensional (N, 4) arrays in xxyy format."
     DATUM_TARGET_OD_SCORES_TYPE = "ObjectDetectionTarget scores must be one (N,) or two-dimensional (N, M) arrays."
-    DATUM_VIDEO_TYPE = "MultiObjectTracking inputs must be an iterable VideoStream of frames."
+    DATUM_VIDEO_TYPE = "MultiobjectTracking inputs must be an iterable VideoStream of frames."
     DATUM_VIDEO_FORMAT = "VideoStream frames must expose 3-dimensional (C, H, W) pixels."
-    DATUM_TARGET_MOT_TYPE = "MultiObjectTrackingDataset targets must have a 'frame_tracks' attribute."
-    DATUM_TARGET_MOT_FRAMES_TYPE = "MultiObjectTrackingTarget frame_tracks must be a sequence of frame targets."
+    DATUM_TARGET_MOT_TYPE = "MultiobjectTrackingDataset targets must have a 'frame_tracks' attribute."
+    DATUM_TARGET_MOT_FRAMES_TYPE = "MultiobjectTrackingTarget frame_tracks must be a sequence of frame targets."
     DATUM_TARGET_MOT_FRAME_TYPE = (
-        "MultiObjectTracking frame targets must have 'boxes', 'labels', 'scores' and 'track_ids'."
+        "MultiobjectTracking frame targets must have 'boxes', 'labels', 'scores' and 'track_ids'."
     )
-    DATUM_TARGET_MOT_BOXES_TYPE = "MultiObjectTracking frame boxes must be two-dimensional (N, 4) xxyy arrays."
+    DATUM_TARGET_MOT_BOXES_TYPE = "MultiobjectTracking frame boxes must be two-dimensional (N, 4) xxyy arrays."
     DATUM_TARGET_MOT_TRACK_IDS_TYPE = (
-        "MultiObjectTracking frame track_ids must be one-dimensional (N,) integer arrays (-1 for untracked)."
+        "MultiobjectTracking frame track_ids must be one-dimensional (N,) integer arrays (-1 for untracked)."
     )
-    DATUM_TARGET_TYPE = "Target is not a valid ImageClassification, ObjectDetection or MultiObjectTracking target."
+    DATUM_TARGET_TYPE = "Target is not a valid ImageClassification, ObjectDetection or MultiobjectTracking target."
     DATUM_METADATA_TYPE = "Datum metadata must be a dictionary."
     DATUM_METADATA_FORMAT = "Datum metadata must contain an 'id' key."
 

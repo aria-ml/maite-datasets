@@ -3,8 +3,8 @@
 import numpy as np
 import pytest
 
-from maite_datasets._base import MultiObjectTrackingTargetTuple, SingleFrameObjectTrackingTargetTuple
-from maite_datasets._builder import _validate_mot_data, to_multi_object_tracking_dataset
+from maite_datasets._base import MultiobjectTrackingTargetTuple, SingleFrameObjectTrackingTargetTuple
+from maite_datasets._builder import _validate_mot_data, to_multiobject_tracking_dataset
 from maite_datasets._validate import (
     ValidationMessages,
     _detect_target_type,
@@ -97,7 +97,7 @@ class TestMOTValidateDatum:
             scores=np.ones(2, np.float32),
             track_ids=np.array([0, 1]),
         )
-        return MultiObjectTrackingTargetTuple(frame_tracks=[frame])
+        return MultiobjectTrackingTargetTuple(frame_tracks=[frame])
 
     def test_detect_target_type_mot(self, good_target):
         assert _detect_target_type(good_target) == "mot"
@@ -124,20 +124,20 @@ class TestMOTValidateDatum:
         frame = SingleFrameObjectTrackingTargetTuple(
             np.zeros((1, 3), np.float32), np.array([0]), np.ones(1), np.array([0])
         )
-        target = MultiObjectTrackingTargetTuple(frame_tracks=[frame])
+        target = MultiobjectTrackingTargetTuple(frame_tracks=[frame])
         assert ValidationMessages.DATUM_TARGET_MOT_BOXES_TYPE in _validate_datum_target_mot(target)
 
     def test_validate_target_mot_bad_track_ids(self):
         frame = SingleFrameObjectTrackingTargetTuple(
             np.zeros((1, 4), np.float32), np.array([0]), np.ones(1), np.array([0.5])
         )
-        target = MultiObjectTrackingTargetTuple(frame_tracks=[frame])
+        target = MultiobjectTrackingTargetTuple(frame_tracks=[frame])
         assert ValidationMessages.DATUM_TARGET_MOT_TRACK_IDS_TYPE in _validate_datum_target_mot(target)
 
 
 class TestMOTBuilder:
     def test_build_and_index(self, videos, labels, bboxes, track_ids, classes):
-        ds = to_multi_object_tracking_dataset(videos, labels, bboxes, track_ids, None, classes)
+        ds = to_multiobject_tracking_dataset(videos, labels, bboxes, track_ids, None, classes)
         assert len(ds) == 4
         stream, target, md = ds[1]
         assert len(list(stream)) == 2
@@ -147,26 +147,26 @@ class TestMOTBuilder:
         assert "id" in md
 
     def test_build_no_classes(self, videos, labels, bboxes, track_ids):
-        ds = to_multi_object_tracking_dataset(videos, labels, bboxes, track_ids, None, None)
+        ds = to_multiobject_tracking_dataset(videos, labels, bboxes, track_ids, None, None)
         assert len(ds) == 4
 
     def test_build_with_metadata(self, videos, labels, bboxes, track_ids, metadata, classes):
-        ds = to_multi_object_tracking_dataset(videos, labels, bboxes, track_ids, metadata, classes)
+        ds = to_multiobject_tracking_dataset(videos, labels, bboxes, track_ids, metadata, classes)
         assert ds[2][2]["foo"] == 2
 
     def test_build_with_name(self, videos, labels, bboxes, track_ids, classes):
         name = "Test_MOT_Dataset"
-        ds = to_multi_object_tracking_dataset(videos, labels, bboxes, track_ids, None, classes, name)
+        ds = to_multiobject_tracking_dataset(videos, labels, bboxes, track_ids, None, classes, name)
         assert name in ds.__class__.__name__
 
     def test_build_passthrough_video_frames(self, labels, bboxes, track_ids, classes):
         videos = [frames_to_stream([np.zeros((3, 8, 8)) for _ in range(i + 1)]) for i in range(4)]
-        ds = to_multi_object_tracking_dataset(videos, labels, bboxes, track_ids, None, classes)
+        ds = to_multiobject_tracking_dataset(videos, labels, bboxes, track_ids, None, classes)
         stream, _, _ = ds[0]
         assert all(hasattr(f, "pixels") for f in stream)
 
     def test_built_dataset_validates(self, videos, labels, bboxes, track_ids, classes):
-        ds = to_multi_object_tracking_dataset(videos, labels, bboxes, track_ids, None, classes)
+        ds = to_multiobject_tracking_dataset(videos, labels, bboxes, track_ids, None, classes)
         validate_dataset(ds, "mot")
         validate_dataset(ds, "auto")
 

@@ -19,7 +19,7 @@ import maite.protocols.object_detection as od
 import numpy as np
 from maite.protocols import ArrayLike, DatasetMetadata, DatumMetadata
 
-from maite_datasets._base import MultiObjectTrackingTargetTuple, SingleFrameObjectTrackingTargetTuple
+from maite_datasets._base import MultiobjectTrackingTargetTuple, SingleFrameObjectTrackingTargetTuple
 from maite_datasets._video import frames_to_stream
 from maite_datasets.protocols import Array
 
@@ -335,7 +335,7 @@ def _build_mot_target(
     bboxes: Sequence[Sequence[Sequence[float]]],
     labels: Sequence[Sequence[int]],
     track_ids: Sequence[Sequence[int]],
-) -> MultiObjectTrackingTargetTuple:
+) -> MultiobjectTrackingTargetTuple:
     """Build one video's per-frame tracking target from its raw annotation lists."""
     frame_tracks = [
         SingleFrameObjectTrackingTargetTuple(
@@ -346,10 +346,10 @@ def _build_mot_target(
         )
         for boxes_f, labels_f, track_ids_f in zip(bboxes, labels, track_ids)
     ]
-    return MultiObjectTrackingTargetTuple(frame_tracks=frame_tracks)
+    return MultiobjectTrackingTargetTuple(frame_tracks=frame_tracks)
 
 
-class CustomMultiObjectTrackingDataset(BaseAnnotatedDataset[Sequence[Sequence[Sequence[int]]]]):
+class CustomMultiobjectTrackingDataset(BaseAnnotatedDataset[Sequence[Sequence[Sequence[int]]]]):
     def __init__(
         self,
         videos: Sequence[Any],
@@ -370,7 +370,7 @@ class CustomMultiObjectTrackingDataset(BaseAnnotatedDataset[Sequence[Sequence[Se
         self._videos = [_as_video_stream(video) for video in videos]
         self._targets = [_build_mot_target(bboxes[i], labels[i], track_ids[i]) for i in range(len(videos))]
 
-    def __getitem__(self, idx: int, /) -> tuple[Any, MultiObjectTrackingTargetTuple, DatumMetadata]:
+    def __getitem__(self, idx: int, /) -> tuple[Any, MultiobjectTrackingTargetTuple, DatumMetadata]:
         return (
             self._videos[idx],
             self._targets[idx],
@@ -378,7 +378,7 @@ class CustomMultiObjectTrackingDataset(BaseAnnotatedDataset[Sequence[Sequence[Se
         )
 
 
-def to_multi_object_tracking_dataset(
+def to_multiobject_tracking_dataset(
     videos: Sequence[Any],
     labels: Sequence[Sequence[Sequence[int]]],
     bboxes: Sequence[Sequence[Sequence[Sequence[float]]]],
@@ -420,5 +420,5 @@ def to_multi_object_tracking_dataset(
     # runtime (keeps the maite floor low for ic/od-only users); cast for typing.
     return cast(
         "mot.Dataset",
-        CustomMultiObjectTrackingDataset(videos, labels, bboxes, track_ids, _listify_metadata(metadata), classes, name),
+        CustomMultiobjectTrackingDataset(videos, labels, bboxes, track_ids, _listify_metadata(metadata), classes, name),
     )

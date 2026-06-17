@@ -40,7 +40,7 @@ ObjectDetectionTargetTuple = namedtuple("ObjectDetectionTargetTuple", ["boxes", 
 
 # Multi-object tracking targets. A SingleFrameObjectTrackingTargetTuple is an
 # ObjectDetectionTargetTuple plus per-detection track_ids; a
-# MultiObjectTrackingTargetTuple holds the per-frame targets for one video as
+# MultiobjectTrackingTargetTuple holds the per-frame targets for one video as
 # its ``frame_tracks`` field. Both satisfy the MAITE multiobject_tracking
 # protocols structurally via attribute access. These use class-based NamedTuple
 # (rather than the functional ``namedtuple``) so the exported fields carry type
@@ -52,7 +52,7 @@ class SingleFrameObjectTrackingTargetTuple(NamedTuple):
     track_ids: ArrayLike
 
 
-class MultiObjectTrackingTargetTuple(NamedTuple):
+class MultiobjectTrackingTargetTuple(NamedTuple):
     frame_tracks: Sequence[SingleFrameObjectTrackingTargetTuple]
 
 
