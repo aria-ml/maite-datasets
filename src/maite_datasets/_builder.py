@@ -54,23 +54,32 @@ def _validate_data(
         if not isinstance(labels, (Sequence, Array)) or not isinstance(labels[0], (int, SupportsInt)):
             raise TypeError("Labels must be a sequence of integers for image classification.")
     elif datum_type == "od":
-        if (
-            not isinstance(labels, (Sequence, Array))
-            or not isinstance(labels[0], (Sequence, Array))
-            or not isinstance(cast(Sequence[Any], labels[0])[0], (int, SupportsInt))
-        ):
-            raise TypeError("Labels must be a sequence of sequences of integers for object detection.")
-        if (
-            bboxes is None
-            or not isinstance(bboxes, (Sequence, Array))
-            or not isinstance(bboxes[0], (Sequence, Array))
-            or not isinstance(bboxes[0][0], (Sequence, Array))
-            or not isinstance(bboxes[0][0][0], (float, SupportsFloat))
-            or not len(bboxes[0][0]) == 4
-        ):
-            raise TypeError("Boxes must be a sequence of sequences of (x0, y0, x1, y1) for object detection.")
+        _validate_od_labels_and_bboxes(labels, bboxes)
     else:
         raise ValueError(f"Unknown datum type '{datum_type}'. Must be 'ic' or 'od'.")
+
+
+def _validate_od_labels_and_bboxes(
+    labels: Array | Sequence[int] | Sequence[Array] | Sequence[Sequence[int]],
+    bboxes: Array | Sequence[Array] | Sequence[Sequence[Array]] | Sequence[Sequence[Sequence[float]]] | None,
+) -> None:
+    if not isinstance(labels, (Sequence, Array)) or not isinstance(labels[0], (Sequence, Array)):
+        raise TypeError("Labels must be a sequence of sequences of integers for object detection.")
+    # Find the first non-empty label sequence to validate the inner element type.
+    nested_labels = cast(Sequence[Sequence[Any]], labels)
+    first_label = next((label for label in nested_labels if len(label) > 0), None)
+    if first_label is not None and not isinstance(first_label[0], (int, SupportsInt)):
+        raise TypeError("Labels must be a sequence of sequences of integers for object detection.")
+    if bboxes is None or not isinstance(bboxes, (Sequence, Array)) or not isinstance(bboxes[0], (Sequence, Array)):
+        raise TypeError("Boxes must be a sequence of sequences of (x0, y0, x1, y1) for object detection.")
+    # Find the first box across all images to validate the box format.
+    first_box = next((cast(Sequence[Any], box) for image_bboxes in bboxes for box in image_bboxes), None)
+    if first_box is not None and (
+        not isinstance(first_box, (Sequence, Array))
+        or not isinstance(first_box[0], (float, SupportsFloat))
+        or not len(first_box) == 4
+    ):
+        raise TypeError("Boxes must be a sequence of sequences of (x0, y0, x1, y1) for object detection.")
 
 
 def _listify_metadata(

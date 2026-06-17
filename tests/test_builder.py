@@ -82,6 +82,12 @@ class TestDatasetValidateData:
         with pytest.raises(TypeError, match="Boxes must be a sequence of sequences"):
             _validate_data("od", images, od_labels, self.bad_boxes_type, None)  # type: ignore
 
+    def test_validate_data_od_empty_first_datum(self, images):
+        # First image has no detections (empty labels and bboxes) - should not raise.
+        labels = [[] if i == 0 else [np.random.randint(0, 9) for _ in range(i)] for i in range(10)]
+        bboxes = [[] if i == 0 else [(0.0, 0.0, 10.0, 10.0) for _ in range(i)] for i in range(10)]
+        _validate_data("od", images, labels, bboxes, None)
+
     def test_validate_data_unknown_datum_type(self, images, ic_labels):
         with pytest.raises(ValueError, match="Unknown datum type"):
             _validate_data("unknown", images, ic_labels, None, None)  # type: ignore
