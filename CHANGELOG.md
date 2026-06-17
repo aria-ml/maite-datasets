@@ -1,5 +1,9 @@
 # Changelog for maite-datasets
 
+## v0.0.15
+
+- [fix] Rename MOT datasets to match MAITE nomenclature
+
 ## v0.0.14
 
 - [feat] Add support for MAITE MOT datasets
