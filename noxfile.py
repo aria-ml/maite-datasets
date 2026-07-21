@@ -19,7 +19,7 @@ def get_python_version(s: nox.Session) -> str:
     return matches.group(0) if matches else PYTHON_VERSION
 
 
-@nox_uv.session(uv_groups=["test"])
+@nox_uv.session(uv_groups=["test"], uv_all_extras=True)
 def test(s: nox.Session) -> None:
     """Run unit tests with coverage reporting. Specify version using `nox -P {version} -e test`."""
     python_version = get_python_version(s)
@@ -28,7 +28,6 @@ def test(s: nox.Session) -> None:
     cov_xml_args = ["--cov-report", f"xml:output/coverage.{python_version}.xml"]
     cov_html_args = ["--cov-report", f"html:output/htmlcov.{python_version}"]
 
-    s.run_install("uv", "sync", "--no-dev", "--all-extras", "--group=test")
     s.run(
         "pytest",
         *cov_args,
@@ -40,18 +39,16 @@ def test(s: nox.Session) -> None:
     s.run("mv", ".coverage", f"output/.coverage.{python_version}", external=True)
 
 
-@nox_uv.session(uv_groups=["type"])
+@nox_uv.session(uv_groups=["type"], uv_all_extras=True)
 def type(s: nox.Session) -> None:  # noqa: A001
     """Run type checks and verify external types. Specify version using `nox -P {version} -e type`."""
-    s.run_install("uv", "sync", "--no-dev", "--all-extras", "--group=type")
     s.run("pyright", "--stats", "src/")
     s.run("pyright", "--ignoreexternal", "--verifytypes", "maite_datasets")
 
 
-@nox_uv.session(uv_groups=["lint"])
+@nox_uv.session(uv_only_groups=["lint"])
 def lint(s: nox.Session) -> None:
     """Perform linting and spellcheck."""
-    s.run_install("uv", "sync", "--only-group=lint")
     s.run("ruff", "check", "--show-fixes", "--exit-non-zero-on-fix", "--fix")
     s.run("ruff", "format", "--check" if IS_CI else ".")
     s.run("codespell")
