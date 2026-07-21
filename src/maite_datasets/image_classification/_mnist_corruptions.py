@@ -18,71 +18,66 @@
 #           - rewrote corruptions that required wand dependency
 #           - specific functions to handle batches of images
 #
-# Notes: OpenCV is required for some corruptions. To install, use:
-#    pip install opencv-python-headless
-# or use the extra when install maite-datasets:
-#    pip install maite-datasets[opencv]
 
 import warnings
 from io import BytesIO
-from typing import TYPE_CHECKING, Callable
+from typing import Callable
 
 import numpy as np
 import skimage as sk
-from numpy.typing import ArrayLike, NDArray
+from numpy.typing import NDArray
 from PIL import Image
+from scipy.ndimage import map_coordinates
 from scipy.ndimage import zoom as scizoom
-from scipy.ndimage.interpolation import map_coordinates
 from skimage import feature, transform
 from skimage.filters import gaussian
 
 warnings.simplefilter("ignore", UserWarning)
 
-if TYPE_CHECKING:
-    from cv2.typing import MatLike
-else:
-    MatLike = ArrayLike
-
 # /////////////// Corruption Helpers ///////////////
 
 
-def disk(radius: int, alias_blur: float = 0.1) -> MatLike:
-    from cv2 import GaussianBlur
+# rewrite of opencv using skimage
+def disk(radius: int, alias_blur: float = 0.1) -> NDArray[np.float32]:
+    from skimage.filters import gaussian
 
     if radius <= 8:
         L = np.arange(-8, 8 + 1)
-        ksize = (3, 3)
+        kradius = 1  # matches cv2 ksize=(3,3) -> kernel half-width 1
     else:
         L = np.arange(-radius, radius + 1)
-        ksize = (5, 5)
+        kradius = 2  # matches cv2 ksize=(5,5) -> kernel half-width 2
+
     X, Y = np.meshgrid(L, L)
     aliased_disk = np.array(radius**2 >= (X**2 + Y**2), dtype=np.float32)
     aliased_disk /= np.sum(aliased_disk)
 
-    # supersample disk to antialias
-    return GaussianBlur(aliased_disk, ksize=ksize, sigmaX=alias_blur)
+    # truncate chosen so the effective kernel half-width matches cv2's ksize
+    truncate = kradius / alias_blur if alias_blur > 0 else 4.0
+    blurred = gaussian(aliased_disk, sigma=alias_blur, truncate=truncate, mode="reflect", preserve_range=True)
+    return blurred.astype(np.float32)
 
 
-# rewrite of wand library motion_blur using opencv and numpy
-def motion_kernel(radius: float = 0.0, sigma: float = 0.0, angle: float = 0.0) -> MatLike:
-    from cv2 import getGaussianKernel, getRotationMatrix2D, warpAffine
+# rewrite of wand library motion_blur using skimage, scipy and numpy
+def motion_kernel(radius: float = 0.0, sigma: float = 0.0, angle: float = 0.0) -> NDArray[np.float32]:
+    from scipy.signal.windows import gaussian as gaussian_window
+    from skimage.transform import rotate
 
     ksize = int(2 * radius + 1)
     if ksize % 2 == 0:
         ksize += 1
 
-    kernel_1d = getGaussianKernel(ksize, sigma)
-    kernel_2d = np.zeros((ksize, ksize))
+    kernel_1d = gaussian_window(ksize, sigma)
+    kernel_1d /= kernel_1d.sum()  # cv2.getGaussianKernel is normalized; scipy's window isn't
 
+    kernel_2d = np.zeros((ksize, ksize), dtype=np.float64)
     pad = ksize // 2
-    kernel_2d[:, pad] = kernel_1d[:, 0]
+    kernel_2d[:, pad] = kernel_1d
 
-    center = (pad, pad)
-    rotation_matrix = getRotationMatrix2D(center, angle, 1.0)
-    kernel_rotated = warpAffine(kernel_2d, rotation_matrix, (ksize, ksize))
+    kernel_rotated = rotate(kernel_2d, angle, resize=False, order=1, mode="constant", cval=0, preserve_range=True)
     kernel_rotated /= kernel_rotated.sum()
 
-    return kernel_rotated
+    return kernel_rotated.astype(np.float32)
 
 
 # modification of https://github.com/FLHerne/mapgen/blob/master/diamondsquare.py
@@ -248,28 +243,30 @@ def glass_blur(x: NDArray[np.number], severity: int = 1) -> NDArray[np.float32]:
 
 
 # modified to handle a batch of images
+# rewrite of opencv using scipy
 def defocus_blur(x: NDArray[np.number], severity: int = 1) -> NDArray[np.float32]:
-    from cv2 import filter2D
+    from scipy.ndimage import correlate
 
     c = [(3, 0.1), (4, 0.5), (6, 0.5), (8, 0.5), (10, 0.5)][severity - 1]
 
     x = x.astype(np.float32) / 255.0
     kernel = disk(radius=c[0], alias_blur=c[1])
-    out = np.array([filter2D(x[i], -1, kernel) for i in range(x.shape[0])])
+    out = np.array([correlate(x[i], kernel, mode="mirror") for i in range(x.shape[0])])
 
     out = np.clip(out, 0, 1) * 255
     return out.astype(np.float32)
 
 
 # modified to remove wand dependency
+# rewrite of opencv version using scipy
 def motion_blur(x: NDArray[np.number], severity: int = 1) -> NDArray[np.float32]:
-    from cv2 import filter2D
+    from scipy.ndimage import correlate
 
     c = [(10, 3), (15, 5), (15, 8), (15, 12), (20, 15)][severity - 1]
 
     x = x.astype(np.float32) / 255.0
     kernel = motion_kernel(radius=c[0], sigma=c[1], angle=np.random.uniform(-45, 45))
-    out = np.array([filter2D(x[i], -1, kernel) for i in range(x.shape[0])])
+    out = np.array([correlate(x[i], kernel, mode="mirror") for i in range(x.shape[0])])
 
     out = np.clip(out, 0, 1) * 255
     return out.astype(np.float32)
@@ -304,8 +301,9 @@ def fog(x: NDArray[np.number], severity: int = 5) -> NDArray[np.float32]:
 
 
 # modified to remove wand dependency
+# rewrite of opencv version using scipy
 def snow(x: NDArray[np.number], severity: int = 5) -> NDArray[np.float32]:
-    from cv2 import filter2D
+    from scipy.ndimage import correlate
 
     c = [
         (0.1, 0.3, 3, 0.5, 10, 4, 0.8),
@@ -322,7 +320,7 @@ def snow(x: NDArray[np.number], severity: int = 5) -> NDArray[np.float32]:
     snow_layer[snow_layer < c[3]] = 0
 
     kernel = motion_kernel(radius=c[4], sigma=c[5], angle=np.random.uniform(-135, -45))
-    out = filter2D(snow_layer[0], -1, kernel)
+    out = correlate(snow_layer[0], kernel, mode="mirror")
 
     x = c[6] * x + (1 - c[6]) * np.maximum(x, x * 1.5 + 0.5)
     x = np.clip(x + out + np.rot90(out, k=2), 0, 1) * 255
@@ -418,8 +416,9 @@ def pixelate(x: NDArray[np.number], severity: int = 3) -> NDArray[np.float32]:
 
 # modified to handle a batch of images
 # mod of https://gist.github.com/erniejunior/601cdf56d2b424757de5
+# rewrite of opencv version using skimage
 def elastic_transform(x_arr: NDArray[np.number], severity: int = 1) -> NDArray[np.float32]:
-    from cv2 import BORDER_CONSTANT, getAffineTransform, warpAffine
+    from skimage.transform import AffineTransform, warp
 
     c = [
         (28 * 2, 28 * 0.7, 28 * 0.1),
@@ -444,7 +443,9 @@ def elastic_transform(x_arr: NDArray[np.number], severity: int = 1) -> NDArray[n
         dtype=np.float32,
     )
     pts2 = pts1 + np.random.uniform(-c[2], c[2], size=pts1.shape).astype(np.float32)
-    M = getAffineTransform(pts1, pts2)
+
+    tform = AffineTransform()
+    tform.estimate(pts1, pts2)  # pts1 (src) -> pts2 (dst), same convention as cv2.getAffineTransform
 
     dx = (gaussian(np.random.uniform(-1, 1, size=shape), c[1], mode="reflect", truncate=3) * c[0]).astype(np.float32)
     dy = (gaussian(np.random.uniform(-1, 1, size=shape), c[1], mode="reflect", truncate=3) * c[0]).astype(np.float32)
@@ -452,11 +453,20 @@ def elastic_transform(x_arr: NDArray[np.number], severity: int = 1) -> NDArray[n
     x, y = np.meshgrid(np.arange(shape[1]), np.arange(shape[0]))
     indices = np.reshape(y + dy, (-1, 1)), np.reshape(x + dx, (-1, 1))
 
-    def elastic_one(img: NDArray, M: NDArray, shape: NDArray, indices: tuple[NDArray, NDArray]) -> NDArray[np.number]:
-        img = warpAffine(img, M, [int(shape[0]), int(shape[1])], borderMode=BORDER_CONSTANT)
-        return np.clip(map_coordinates(img, indices, order=1, mode="constant").reshape(shape), 0, 1)  # type: ignore
+    def elastic_one(
+        img: NDArray, tform: AffineTransform, shape: NDArray, indices: tuple[NDArray, NDArray]
+    ) -> NDArray[np.number]:
+        warped = warp(
+            img,
+            tform.inverse,  # warp wants the output->input mapping, hence .inverse
+            output_shape=(int(shape[0]), int(shape[1])),
+            order=1,
+            mode="constant",
+            cval=0.0,
+        )
+        return np.clip(map_coordinates(warped, indices, order=1, mode="constant").reshape(shape), 0, 1)
 
-    out = np.array([elastic_one(x_arr[i], M, shape, indices) for i in range(x_arr.shape[0])]) * 255
+    out = np.array([elastic_one(x_arr[i], tform, shape, indices) for i in range(x_arr.shape[0])]) * 255
     return out.astype(np.float32)
 
 
