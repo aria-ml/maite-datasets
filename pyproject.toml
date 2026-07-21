@@ -84,7 +84,6 @@ dev = [
   "matplotlib>=3.9",
   "huggingface-hub>=1.23.0",
   "imagecodecs>=2024.12.30",
-  "pyyaml>=6.0.3"
 ]
 
 [tool.uv.sources]
