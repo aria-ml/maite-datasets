@@ -20,7 +20,7 @@ from maite_datasets._base import (
     ObjectDetectionTargetTuple,
     _merge_datum_metadata,
 )
-from maite_datasets._fileio import _hf_extract
+from maite_datasets._fileio import _hf_extract, _print
 
 
 def _bbox_coord(obj: Any, name: str, annotation: str) -> int:
@@ -117,8 +117,9 @@ class M3FD(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str]
         DataLocation(
             url="https://www.kaggle.com/api/v1/datasets/download/nus1998/m3fd-dataset?datasetVersionNumber=1",
             filename="archive.zip",
-            md5=True,
-            checksum="6VVWpm+e2Zb12isdBahe1w==",
+            md5=False,
+            checksum="5ad2ef3169e4d155be4f9adb193181bacb3cdda1adfe4b1462a8e4cf23beb93e",
+            kaggle=True,
         ),
     ]
 
@@ -156,9 +157,17 @@ class M3FD(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str]
         datum_metadata: dict[str, list[Any]] = {}
 
         splits = ["train", "val"] if self.image_set == "base" else [self.image_set]
-        self._limit = [f"{split}/*" for split in splits]
 
-        _hf_extract(repo_id=self._repo_id, repo_type=self._repo_type, local_dir=self.path, allow_patterns=self._limit)
+        if (self.path / "train/images").is_dir() or (self.path / "val/images").is_dir():
+            _print("Data already downloaded, skipping download.", self._verbose)
+        else:
+            _print("Downloading files from huggingface.", self._verbose)
+
+            self._limit = [f"{split}/*" for split in splits]
+
+            _hf_extract(
+                repo_id=self._repo_id, repo_type=self._repo_type, local_dir=self.path, allow_patterns=self._limit
+            )
 
         for split in splits:
             base_dir = self.path / split

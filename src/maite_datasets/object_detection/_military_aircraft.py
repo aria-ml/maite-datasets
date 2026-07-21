@@ -79,6 +79,13 @@ class MilitaryAircraft(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, lis
 
     _resources = [
         DataLocation(
+            url="https://www.kaggle.com/api/v1/datasets/download/ahnuf05/aeroscan-military-aircraft-classification?datasetVersionNumber=1",
+            filename="archive.zip",
+            md5=False,
+            checksum="6f3b0bb890cda7004b04eb430d3ae2c571b9a407b9ac5e3c47b2921c3545686f",
+            kaggle=True,
+        ),
+        DataLocation(
             url="https://huggingface.co/datasets/Ahnuf/Military_Aircraft_Detection_Classification_Image_Dataset/resolve/main/dataset.zip?download=true",
             filename="dataset.zip",
             md5=False,
@@ -258,10 +265,13 @@ class MilitaryAircraft(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, lis
         folders = ["train", "val", "test"] if self.image_set == "base" else [self.image_set]
         data_folder: list[Path] = []
         for folder in folders:
-            data_folder.extend(sorted((self.path / folder).glob("*.jpg")))
+            data_folder.extend(list((self.path / folder).glob("*.jpg")))
+            data_folder.extend(list((self.path / folder).glob("*.jpeg")))
+            data_folder.extend(list((self.path / folder).glob("*.png")))
         if not data_folder:
             raise FileNotFoundError
 
+        data_folder = sorted(data_folder)
         data = [str(entry) for entry in data_folder]
         labels = [str(entry.with_suffix(".txt")) for entry in data_folder]
 

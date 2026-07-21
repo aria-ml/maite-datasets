@@ -5,8 +5,8 @@ __all__ = []
 from pathlib import Path
 from typing import Literal
 
-from maite_datasets._base import DatasetMetadata, ReaderTransforms, _dataset_dir
-from maite_datasets._fileio import _hf_extract, _print, _remove_folder_nest
+from maite_datasets._base import DataLocation, DatasetMetadata, ReaderTransforms, _dataset_dir
+from maite_datasets._fileio import _ensure_exists, _hf_extract, _print, _remove_folder_nest
 from maite_datasets._reader import DEFAULT_IMAGES_DIR
 from maite_datasets.object_detection._yolo import YOLODataset, YOLODatasetReader
 
@@ -68,6 +68,16 @@ class DroneSwarm(YOLODataset):
     _repo_type: Literal["dataset", "model"] = "dataset"
     _limit: list[str] | str | None = "Drone_Swarm_Dataset/*"
 
+    _resources = [
+        DataLocation(
+            url="https://www.kaggle.com/api/v1/datasets/download/simuletic/military-drone-swarm-and-saturation-attack-dataset?datasetVersionNumber=1",
+            filename="archive.zip",
+            md5=False,
+            checksum="26430a62d7de2cad1feb7ae4f2ab3b2aa76bb0f016ff047a23364b2352b14931",
+            kaggle=True,
+        ),
+    ]
+
     def __init__(
         self,
         root: str | Path,
@@ -78,14 +88,17 @@ class DroneSwarm(YOLODataset):
         lazy: bool = False,
     ) -> None:
         self._root: Path = root.absolute() if isinstance(root, Path) else Path(root).absolute()
-        self._verbose = verbose
         self.image_set = image_set
+        self._download = download
+        self._verbose = verbose
         self.path: Path = self._get_dataset_dir()
         unique_id = f"{self.__class__.__name__}_{self.image_set}"
 
         # Load the data
         if download:
-            self._load_hf_data()
+            self._resource: DataLocation = self._resources[0]
+            self._load_data()
+            # self._load_hf_data()
         reader = YOLODatasetReader(self.path, dataset_id=unique_id, image_extensions=[".png"], image_set="train")
 
         super().__init__(reader, lazy, transforms)
@@ -112,6 +125,23 @@ class DroneSwarm(YOLODataset):
 
         _hf_extract(repo_id=self._repo_id, repo_type=self._repo_type, local_dir=self.path, allow_patterns=self._limit)
 
+        self._remove_nested_folder()
+
+    def _remove_nested_folder(self) -> None:
         nested = self.path / "Drone_Swarm_Dataset"
         if nested.is_dir():
             _remove_folder_nest(nested, verbose=self._verbose)
+
+    def _load_data(self) -> None:
+        """
+        Function to determine if data can be accessed or if it needs to be downloaded and/or extracted.
+        """
+        if (self.path / "data.yaml").exists() or (self.path / "classes.txt").exists():
+            _print("Data already downloaded, skipping download.", self._verbose)
+            return
+
+        _print("Downloading files from kaggle.", self._verbose)
+
+        _ensure_exists(*self._resource, self.path, self._root, self._download, self._verbose)
+
+        self._remove_nested_folder()

@@ -17,7 +17,7 @@ from maite_datasets._base import (
     NumpyImageClassificationTransform,
     _merge_datum_metadata,
 )
-from maite_datasets._fileio import _hf_extract
+from maite_datasets._fileio import _hf_extract, _print
 
 
 class MilitaryVehicles(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
@@ -156,9 +156,17 @@ class MilitaryVehicles(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
         datum_metadata: dict[str, list[Any]] = {}
 
         image_sets = ["train", "test"] if self.image_set == "base" else [self.image_set]
-        self._limit = [f"{img_set}_fine/*" for img_set in image_sets]
 
-        _hf_extract(repo_id=self._repo_id, repo_type=self._repo_type, local_dir=self.path, allow_patterns=self._limit)
+        if (self.path / "train/images").is_dir() or (self.path / "val/images").is_dir():
+            _print("Data already downloaded, skipping download.", self._verbose)
+        else:
+            _print("Downloading files from huggingface.", self._verbose)
+
+            self._limit = [f"{img_set}_fine/*" for img_set in image_sets]
+
+            _hf_extract(
+                repo_id=self._repo_id, repo_type=self._repo_type, local_dir=self.path, allow_patterns=self._limit
+            )
 
         for img_set in image_sets:
             annotations: NDArray = np.load(self.path / f"{img_set}_fine/{img_set}_true_fine.npy")

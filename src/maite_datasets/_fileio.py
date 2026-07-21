@@ -45,18 +45,36 @@ def _validate_file(fpath: Path | str, file_md5: str, md5: bool = False, chunk_si
     return hasher.hexdigest() == file_md5
 
 
-def _download_dataset(url: str, file_path: Path, timeout: int = 60, verbose: bool = False) -> None:
+def _session_setup(kaggle: bool, timeout: int) -> requests.Session:
+    session = requests.Session()
+    session.headers.update(
+        {
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",  # noqa: E501
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        }
+    )
+
+    if kaggle:
+        response = session.get(
+            "https://www.kaggle.com",
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        # session.cookies is auto-populated by requests' Session machinery --
+        # ka_sessionid (and anything else Kaggle sets) is already there.
+    else:
+        session.headers["Referer"] = "https://google.com/"
+
+    return session
+
+
+def _download_dataset(
+    url: str, file_path: Path, kaggle: bool = False, timeout: int = 60, verbose: bool = False
+) -> None:
     """Download a single resource from its URL to the `data_folder`."""
     error_msg = "URL fetch failure on {}: {} -- {}"
     try:
-        session = requests.Session()
-        session.headers.update(
-            {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",  # noqa: E501
-                "Referer": "https://google.com/",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            }
-        )
+        session = _session_setup(kaggle, timeout)
         response = session.get(url, stream=True, timeout=timeout)
         response.raise_for_status()
 
@@ -148,6 +166,7 @@ def _ensure_exists(
     filename: str,
     md5: bool,
     checksum: str,
+    kaggle: bool,
     directory: Path,
     root: Path,
     download: bool = True,
@@ -170,7 +189,7 @@ def _ensure_exists(
     # Download file if it doesn't exist.
     if not check_path.exists() and download:
         _print(f"Downloading {filename} from {url}", verbose)
-        _download_dataset(url, check_path, verbose=verbose)
+        _download_dataset(url, check_path, kaggle=kaggle, verbose=verbose)
         if not _validate_file(check_path, checksum, md5):
             raise Exception("File checksum mismatch. Remove current file and retry download.")
 

@@ -185,6 +185,7 @@ class DataLocation(NamedTuple):
     filename: str
     md5: bool
     checksum: str
+    kaggle: bool = False
 
 
 def _dataset_dir(root: Path, name: str) -> Path:

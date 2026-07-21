@@ -71,12 +71,14 @@ def dronevehicle_fake(tmp_path_factory):
     base = temp / "dronevehicle"
     for split, count in (("train", 3), ("val", 2), ("test", 1)):
         img_dir = base / split / f"{split}img"
+        img_ir_dir = base / split / f"{split}imgr"
         ir_dir = base / split / f"{split}labelr"
         rgb_dir = base / split / f"{split}label"
-        for folder in (img_dir, ir_dir, rgb_dir):
+        for folder in (img_dir, img_ir_dir, ir_dir, rgb_dir):
             folder.mkdir(parents=True, exist_ok=True)
         for i in range(count):
             _save_image(img_dir / f"{i:05}.jpg")
+            _save_image(img_ir_dir / f"{i:05}.jpg")
             (ir_dir / f"{i:05}.xml").write_text(DRONEVEHICLE_IR_ANNOTATION)
             (rgb_dir / f"{i:05}.xml").write_text(DRONEVEHICLE_RGB_ANNOTATION)
     yield temp
@@ -190,7 +192,7 @@ class TestDroneVehicle:
         dataset = DroneVehicle(root=dronevehicle_fake)
         assert len(dataset) == 3
         img, target, datum_meta = dataset[0]
-        assert img.shape == (3, 10, 10)
+        assert img.shape == (4, 10, 10)
         # "feright car" is corrected to the "freight car" class
         assert np.array_equal(target.labels, [4])
         # Rotated quadrilateral reduced to its axis-aligned extent
@@ -314,8 +316,25 @@ class TestDroneSwarm:
         assert img.shape == (3, 48, 64)
         assert target.boxes.shape == (1, 4)
 
+    def test_droneswarm_hf_load(self, droneswarm_fake, monkeypatch, tmp_path, capsys):
+        monkeypatch.setattr("maite_datasets.object_detection._droneswarm._hf_extract", lambda **kwargs: None)
+        dataset = DroneSwarm(root=droneswarm_fake, verbose=True)
+        dataset.path = tmp_path
+        datapath = tmp_path / "Drone_Swarm_Dataset"
+        (datapath / "images").mkdir(parents=True)
+        (datapath / "labels").mkdir(parents=True)
+        for i in range(3):
+            _save_image(datapath / "images" / f"{i:05}.tiff")
+            (datapath / "labels" / f"{i:05}.txt").write_text("")
+
+        dataset._load_hf_data()
+        assert "Downloading files from huggingface." in capsys.readouterr().out
+
+        dataset._load_hf_data()
+        assert "Data already downloaded, skipping download." in capsys.readouterr().out
+
     def test_droneswarm_download(self, tmp_path, monkeypatch, capsys):
-        def fake_extract(repo_id, repo_type, local_dir, allow_patterns, **kwargs):
+        def fake_extract(url, filename, md5, checksum, kaggle, local_dir, root, download, verbose):
             nested = local_dir / "Drone_Swarm_Dataset"
             (nested / "images").mkdir(parents=True)
             (nested / "labels").mkdir(parents=True)
@@ -323,10 +342,10 @@ class TestDroneSwarm:
             (nested / "labels" / "00000.txt").write_text("0 0.5 0.5 0.4 0.4\n")
             (nested / "classes.txt").write_text("drone\n")
 
-        monkeypatch.setattr("maite_datasets.object_detection._droneswarm._hf_extract", fake_extract)
+        monkeypatch.setattr("maite_datasets.object_detection._droneswarm._ensure_exists", fake_extract)
         dataset = DroneSwarm(root=tmp_path, download=True, verbose=True)
         assert len(dataset) == 1
-        assert "Downloading files from huggingface." in capsys.readouterr().out
+        assert "Downloading files from kaggle." in capsys.readouterr().out
 
     def test_droneswarm_skips_existing_download(self, droneswarm_fake, monkeypatch, capsys):
         def fail(**kwargs):
@@ -349,7 +368,7 @@ class TestSkySeaLand:
         assert target.boxes.shape == (1, 4)
 
     def test_skysealand_download(self, tmp_path, monkeypatch, capsys):
-        def fake_extract(url, filename, md5, checksum, local_dir, root, download, verbose):
+        def fake_extract(url, filename, md5, checksum, kaggle, local_dir, root, download, verbose):
             nested = local_dir / "train"
             (nested / "images").mkdir(parents=True)
             (nested / "labels").mkdir(parents=True)

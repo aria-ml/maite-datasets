@@ -13,6 +13,7 @@ from maite_datasets._fileio import (
     _extract_zip_archive,
     _hf_extract,
     _remove_folder_nest,
+    _session_setup,
     _validate_file,
 )
 
@@ -44,11 +45,21 @@ class MockRequestException(Response):
         raise RequestException
 
 
+class MockKaggleResponse:
+    def __init__(self, headers=None, status_code=200):
+        self.headers = headers or {}
+        self.status_code = status_code
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise requests.exceptions.HTTPError(response=self)
+
+
 @pytest.mark.optional
 class TestHelperFunctionsBaseDataset:
     @pytest.mark.parametrize("verbose", [True, False])
     def test_ensure_exists_no_zip(self, capsys, dataset_no_zip, verbose):
-        resource = ("fakeurl", "stuff.txt", True, TEMP_MD5)
+        resource = ("fakeurl", "stuff.txt", True, TEMP_MD5, False)
         _ensure_exists(*resource, dataset_no_zip.parent, dataset_no_zip.parent, True, verbose)
         if verbose:
             captured = capsys.readouterr()
@@ -57,7 +68,7 @@ class TestHelperFunctionsBaseDataset:
     @pytest.mark.parametrize("verbose", [True, False])
     def test_ensure_exists_single_zip(self, capsys, dataset_single_zip, verbose):
         checksum = get_tmp_hash(dataset_single_zip)
-        resource = ("fakeurl", "testing.zip", True, checksum)
+        resource = ("fakeurl", "testing.zip", True, checksum, False)
         _ensure_exists(
             *resource,
             dataset_single_zip.parent,
@@ -70,7 +81,7 @@ class TestHelperFunctionsBaseDataset:
             assert "Extracting testing.zip..." in captured.out
 
     def test_ensure_exists_file_exists_bad_checksum(self, dataset_no_zip):
-        resource = ("fakeurl", "stuff.txt", True, TEMP_SHA256)
+        resource = ("fakeurl", "stuff.txt", True, TEMP_SHA256, False)
         err_msg = "File checksum mismatch. Remove current file and retry download."
         with pytest.raises(Exception) as e:
             _ensure_exists(*resource, dataset_no_zip.parent, dataset_no_zip.parent, False)
@@ -87,7 +98,7 @@ class TestHelperFunctionsBaseDataset:
         monkeypatch.setattr("maite_datasets._fileio._download_dataset", fake_download)
 
         url = "https://example.invalid/mnist.npz"
-        resource = (url, "mnist.npz", False, checksum)
+        resource = (url, "mnist.npz", False, checksum, False)
         _ensure_exists(*resource, mnist_folder, mnist_folder.parent, True, True)
         captured = capsys.readouterr()
         assert f"Downloading mnist.npz from {url}" in captured.out
@@ -98,7 +109,7 @@ class TestHelperFunctionsBaseDataset:
 
         monkeypatch.setattr("maite_datasets._fileio._download_dataset", fake_download)
 
-        resource = ("https://example.invalid/mnist.npz", "mnist.npz", False, "abc")
+        resource = ("https://example.invalid/mnist.npz", "mnist.npz", False, "abc", False)
         err_msg = "File checksum mismatch. Remove current file and retry download."
         with pytest.raises(Exception) as e:
             _ensure_exists(*resource, mnist_folder, mnist_folder.parent, True, False)
@@ -121,14 +132,14 @@ class TestHelperFunctionsBaseDataset:
 
         monkeypatch.setattr("maite_datasets._fileio._download_dataset", fake_download)
 
-        resource = ("https://example.invalid/fake.zip", "2021.zip", True, checksum)
+        resource = ("https://example.invalid/fake.zip", "2021.zip", True, checksum, False)
         _ensure_exists(*resource, mnist_folder, mnist_folder.parent, True, verbose)
         if verbose:
             captured = capsys.readouterr()
             assert f"Extracting {resource[1]}..." in captured.out
 
     def test_ensure_exists_error(self, dataset_no_zip):
-        resource = ("fakeurl", "something.zip", True, "")
+        resource = ("fakeurl", "something.zip", True, "", False)
         err_msg = "Data could not be loaded with the provided root directory,"
         with pytest.raises(FileNotFoundError) as e:
             _ensure_exists(*resource, dataset_no_zip.parent, dataset_no_zip.parent, False)
@@ -149,6 +160,41 @@ class TestHelperFunctionsBaseDataset:
         monkeypatch.setattr(requests.Session, "get", mock_get)
         with pytest.raises(ValueError):
             _download_dataset(url="http://mock/", file_path=Path("fake/path"))
+
+    def test_non_kaggle_sets_headers_and_no_request_made(self, monkeypatch):
+        called = False
+
+        def mock_get(*args, **kwargs):
+            nonlocal called
+            called = True
+            return MockKaggleResponse()
+
+        monkeypatch.setattr(requests.Session, "get", mock_get)
+        session = _session_setup(kaggle=False, timeout=30)
+        assert called is False
+        assert session.headers["Referer"] == "https://google.com/"
+        assert len(session.cookies) == 0
+
+    def test_kaggle_extracts_ka_sessionid_from_set_cookie(self, monkeypatch):
+        session = _session_setup(kaggle=True, timeout=30)
+        assert session.cookies.get("ka_sessionid") is not None
+        assert "Referer" not in session.headers
+
+    def test_kaggle_no_ka_sessionid_in_set_cookie_leaves_cookies_empty(self, monkeypatch):
+        def mock_get(self, url, headers=None, stream=None, timeout=None):
+            return MockKaggleResponse(headers={"Set-Cookie": "other_cookie=xyz; Path=/"})
+
+        monkeypatch.setattr(requests.Session, "get", mock_get)
+        session = _session_setup(kaggle=True, timeout=30)
+        assert session.cookies.get("ka_sessionid", "") == ""
+
+    def test_kaggle_http_error_on_first_request_propagates(self, monkeypatch):
+        def mock_get(self, url, headers=None, stream=None, timeout=None):
+            return MockKaggleResponse(status_code=403)
+
+        monkeypatch.setattr(requests.Session, "get", mock_get)
+        with pytest.raises(requests.exceptions.HTTPError):
+            _session_setup(kaggle=True, timeout=30)
 
     @pytest.mark.parametrize("use_md5, hash_value", [(True, TEMP_MD5), (False, TEMP_SHA256)])
     def test_validate_file(self, dataset_no_zip, use_md5, hash_value):

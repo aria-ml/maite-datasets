@@ -95,6 +95,13 @@ class MilitaryAircraft(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
 
     _resources = [
         DataLocation(
+            url="https://www.kaggle.com/api/v1/datasets/download/ahnuf05/aeroscan-military-aircraft-classification?datasetVersionNumber=1",
+            filename="archive.zip",
+            md5=False,
+            checksum="6f3b0bb890cda7004b04eb430d3ae2c571b9a407b9ac5e3c47b2921c3545686f",
+            kaggle=True,
+        ),
+        DataLocation(
             url="https://huggingface.co/datasets/Ahnuf/Military_Aircraft_Detection_Classification_Image_Dataset/resolve/main/dataset.zip?download=true",
             filename="dataset.zip",
             md5=False,
@@ -286,7 +293,12 @@ class MilitaryAircraft(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
         labels: list[int] = []
         self._crop: list[tuple[int, ...]] = []
         for file in data_folder:
-            image_path = str(file.with_suffix(".jpg"))
+            correct_file = file.with_suffix(".jpg")
+            if not correct_file.exists():
+                correct_file = file.with_suffix(".jpeg")
+            if not correct_file.exists():
+                correct_file = file.with_suffix(".png")
+            image_path = str(correct_file)
             found = False
             with open(file) as f:
                 for line in f:

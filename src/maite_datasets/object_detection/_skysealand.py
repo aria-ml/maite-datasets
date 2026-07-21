@@ -70,12 +70,11 @@ class SkySeaLand(YOLODataset):
         DataLocation(
             url="https://www.kaggle.com/api/v1/datasets/download/mdzahidhasanriad/skysealand?datasetVersionNumber=1",
             filename="archive.zip",
-            md5=True,
-            checksum="gQNTvmvVECRY0TaE6KZMMQ==",
+            md5=False,
+            checksum="aa391650d46dfacf7eee73036ca2321d5e90cef8a253d43a2936f3d089214e7b",
+            kaggle=True,
         ),
     ]
-
-    _classes: list[str] = ["Airplane", "Boat", "Car", "Ship"]
 
     def __init__(
         self,
