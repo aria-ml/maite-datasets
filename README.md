@@ -10,23 +10,49 @@ To install and use `maite-datasets` you can use pip:
 pip install maite-datasets
 ```
 
-For status bar indicators when downloading, you can include the extra `tqdm` when installing:
+### Extras
 
-```bash
-pip install maite-datasets[tqdm]
-```
+Optional features are installed as extras, e.g. `pip install maite-datasets[tqdm]`.
+
+| Extra  | Enables                                                                         |
+|--------|---------------------------------------------------------------------------------|
+| `tqdm` | Status bar indicators when downloading.                                         |
+| `hf`   | Downloading datasets hosted on Hugging Face Hub and decoding their TIFF images. |
+| `av`   | Decoding video into frames for multi-object tracking datasets.                  |
+| `all`  | All of the above.                                                               |
 
 ## Available Downloadable Datasets
 
-| Task           | Dataset          | Description                                                         |
-|----------------|------------------|---------------------------------------------------------------------|
-| Classification | CIFAR10          | [CIFAR10](https://www.cs.toronto.edu/~kriz/cifar.html) dataset.     |
-| Classification | MNIST            | A dataset of hand-written digits.                                   |
-| Classification | Ships            | A dataset that focuses on identifying ships from satellite images.  |
-| Detection      | AntiUAVDetection | A UAV detection dataset in natural images with varying backgrounds. |
-| Detection      | MILCO            | A side-scan sonar dataset focused on mine-like object detection.    |
-| Detection      | Seadrone         | A UAV dataset focused on open water object detection.               |
-| Detection      | VOCDetection     | [Pascal VOC](http://host.robots.ox.ac.uk/pascal/VOC/) dataset.      |
+| Task           | Dataset          | Description                                                                   |
+|----------------|------------------|-------------------------------------------------------------------------------|
+| Classification | CIFAR10          | [CIFAR10][cifar10] dataset.                                                   |
+| Classification | MilitaryAircraft | 88 classes of [military aircraft][aircraft], cropped to one object per datum. |
+| Classification | MilitaryVehicles | 24 classes of [military vehicles][vehicles]. Requires the `hf` extra.         |
+| Classification | MNIST            | A dataset of hand-written digits.                                             |
+| Classification | Ships            | A dataset that focuses on identifying ships from satellite images.            |
+| Detection      | AntiUAVDetection | A UAV detection dataset in natural images with varying backgrounds.           |
+| Detection      | DroneSwarm       | A synthetic [multi-drone swarm][swarm] dataset. Requires the `hf` extra.      |
+| Detection      | DroneVehicle     | Paired RGB-infrared [drone imagery][dronevehicle] for vehicle detection.      |
+| Detection      | M3FD             | Paired RGB-infrared [imagery][m3fd] for people and vehicle detection.         |
+| Detection      | MILCO            | A side-scan sonar dataset focused on mine-like object detection.              |
+| Detection      | MilitaryAircraft | The detection version of the 88 class [military aircraft][aircraft] dataset.  |
+| Detection      | SeaDrone         | A UAV dataset focused on open water object detection.                         |
+| Detection      | SkySeaLand       | [Satellite imagery][skysealand] of air, sea and land transportation.          |
+| Detection      | VOCDetection     | [Pascal VOC][voc] dataset.                                                    |
+
+[cifar10]: https://www.cs.toronto.edu/~kriz/cifar.html
+[aircraft]: https://huggingface.co/datasets/Ahnuf/Military_Aircraft_Detection_Classification_Image_Dataset
+[vehicles]: https://huggingface.co/datasets/leibnitz-lab/military_vehicles
+[swarm]: https://huggingface.co/datasets/Simuletic/Military-Drone-Swarm-Saturation-Attack-Dataset
+[dronevehicle]: https://github.com/VisDrone/DroneVehicle
+[m3fd]: https://github.com/dlut-dimt/TarDAL
+[skysealand]: https://www.kaggle.com/datasets/mdzahidhasanriad/skysealand/data
+[voc]: http://host.robots.ox.ac.uk/pascal/VOC/
+
+The paired RGB-infrared datasets (`DroneVehicle`, `M3FD`) stack the infrared channel onto the RGB image.
+`MilitaryAircraft` and `MilitaryVehicles` expose a `hierarchy` attribute describing their class ontology.
+Every dataset accepts `lazy=True` to defer image decoding until the image is actually read, which keeps
+metadata-only passes over large datasets cheap.
 
 ### Usage
 

@@ -1,6 +1,6 @@
 # Changelog for maite-datasets
 
-## PENDING
+## v0.0.16
 
 - [feat] Add 6 new datasets
   - M3FD dataset (google drive download)
