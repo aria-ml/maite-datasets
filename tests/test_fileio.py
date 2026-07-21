@@ -11,6 +11,8 @@ from maite_datasets._fileio import (
     _extract_archive,
     _extract_tar_archive,
     _extract_zip_archive,
+    _hf_extract,
+    _remove_folder_nest,
     _validate_file,
 )
 
@@ -176,3 +178,159 @@ class TestHelperFunctionsBaseDataset:
         with pytest.raises(FileNotFoundError) as e:
             _extract_tar_archive(file_path=dataset_single_zip, extract_to=dataset_single_zip.parent)
         assert err_msg in str(e.value)
+
+
+class MockResponse:
+    """Minimal stand-in for the streamed responses `_download_dataset` consumes."""
+
+    def __init__(self, content=b"", content_type="application/octet-stream", text=""):
+        self._content = content
+        self.text = text
+        self.headers = {"content-type": content_type, "content-length": str(len(content))}
+
+    def raise_for_status(self):
+        pass
+
+    def iter_content(self, block_size):
+        for start in range(0, len(self._content), block_size):
+            yield self._content[start : start + block_size]
+
+
+GDRIVE_WARNING_PAGE = (
+    '<form id="download-form" action="https://drive.usercontent.google.com/download">'
+    '<input name="id" value="abc123"><input name="confirm" value="t"></form>'
+)
+
+
+@pytest.mark.optional
+class TestDownloadDataset:
+    @pytest.mark.parametrize("verbose", [True, False])
+    def test_download_writes_content(self, monkeypatch, tmp_path, verbose):
+        monkeypatch.setattr(requests.Session, "get", lambda *args, **kwargs: MockResponse(b"payload-bytes"))
+        file_path = tmp_path / "out.bin"
+        _download_dataset(url="http://mock/", file_path=file_path, verbose=verbose)
+        assert file_path.read_bytes() == b"payload-bytes"
+
+    def test_download_follows_google_drive_confirmation(self, monkeypatch, tmp_path):
+        """The first response is Google's virus-scan warning page; the form is resubmitted."""
+        responses = [
+            MockResponse(content_type="text/html", text=GDRIVE_WARNING_PAGE),
+            MockResponse(b"real-bytes"),
+        ]
+        requested = []
+
+        def mock_get(self, url, **kwargs):
+            requested.append((url, kwargs.get("params")))
+            return responses.pop(0)
+
+        monkeypatch.setattr(requests.Session, "get", mock_get)
+        file_path = tmp_path / "out.bin"
+        _download_dataset(url="http://mock/", file_path=file_path)
+        assert file_path.read_bytes() == b"real-bytes"
+        assert requested[1] == (
+            "https://drive.usercontent.google.com/download",
+            {"id": "abc123", "confirm": "t"},
+        )
+
+    def test_download_html_without_form_is_written_as_is(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(
+            requests.Session,
+            "get",
+            lambda *args, **kwargs: MockResponse(b"<html>nope</html>", content_type="text/html", text="<html>nope"),
+        )
+        file_path = tmp_path / "out.html"
+        _download_dataset(url="http://mock/", file_path=file_path)
+        assert file_path.read_bytes() == b"<html>nope</html>"
+
+
+@pytest.mark.optional
+class TestRemoveFolderNest:
+    def test_moves_contents_up_and_removes_folder(self, capsys, tmp_path):
+        nested = tmp_path / "nested"
+        nested.mkdir()
+        (nested / "a.txt").write_text("a")
+        (nested / "sub").mkdir()
+
+        _remove_folder_nest(nested, verbose=True)
+
+        assert not nested.exists()
+        assert (tmp_path / "a.txt").read_text() == "a"
+        assert (tmp_path / "sub").is_dir()
+        assert "All contents moved up one level successfully!" in capsys.readouterr().out
+
+    def test_keeps_conflicting_files(self, capsys, tmp_path):
+        nested = tmp_path / "nested"
+        nested.mkdir()
+        (nested / "a.txt").write_text("new")
+        (tmp_path / "a.txt").write_text("existing")
+
+        _remove_folder_nest(nested, verbose=True)
+
+        assert (tmp_path / "a.txt").read_text() == "existing"
+        assert (nested / "a.txt").exists()
+        assert "The following files were not moved:" in capsys.readouterr().out
+
+    def test_overwrite_replaces_existing(self, tmp_path):
+        nested = tmp_path / "nested"
+        nested.mkdir()
+        (nested / "a.txt").write_text("new")
+        (tmp_path / "a.txt").write_text("existing")
+
+        _remove_folder_nest(nested, overwrite=True)
+
+        assert (tmp_path / "a.txt").read_text() == "new"
+        assert not nested.exists()
+
+
+@pytest.mark.optional
+class TestHFExtract:
+    @pytest.fixture
+    def hf_mock(self, monkeypatch):
+        """Patch in a fake hub, returning the record of files it was asked to download."""
+        downloaded = []
+
+        def fake_download(repo_id, filename, repo_type, local_dir):
+            downloaded.append(filename)
+            target = Path(local_dir) / filename
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("data")
+
+        def make_api(filelist):
+            class FakeApi:
+                def list_repo_files(self, repo_id, repo_type):
+                    return filelist
+
+            monkeypatch.setattr("maite_datasets._fileio.HfApi", FakeApi)
+            monkeypatch.setattr("maite_datasets._fileio.hf_hub_download", fake_download)
+            return downloaded
+
+        return make_api
+
+    @pytest.mark.parametrize(
+        "allow_patterns, expected",
+        [
+            (None, ["train/a.png", "train/b.png", "val/c.png"]),
+            ("train/*", ["train/a.png", "train/b.png"]),
+            (["val/*", "train/a.png"], ["train/a.png", "val/c.png"]),
+        ],
+    )
+    def test_hf_extract_pattern_selection(self, hf_mock, tmp_path, allow_patterns, expected):
+        downloaded = hf_mock(["train/a.png", "train/b.png", "val/c.png"])
+        _hf_extract("repo", "dataset", tmp_path, allow_patterns=allow_patterns)
+        assert downloaded == expected
+
+    def test_hf_extract_skips_existing_files(self, hf_mock, tmp_path):
+        downloaded = hf_mock(["a.png", "b.png"])
+        (tmp_path / "a.png").write_text("already here")
+        _hf_extract("repo", "dataset", tmp_path)
+        assert downloaded == ["b.png"]
+
+    def test_hf_extract_warns_on_large_download(self, capsys, hf_mock, tmp_path):
+        hf_mock([f"{i}.png" for i in range(501)])
+        _hf_extract("repo", "dataset", tmp_path, verbose=True)
+        assert "Downloading 501 files. This may take a while ..." in capsys.readouterr().out
+
+    def test_hf_extract_without_huggingface_hub(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("maite_datasets._fileio.HfApi", None)
+        with pytest.raises(ImportError, match="huggingface-hub is a required library"):
+            _hf_extract("repo", "dataset", tmp_path)

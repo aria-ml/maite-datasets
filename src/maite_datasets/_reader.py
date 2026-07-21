@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Generic, TypeVar
 
@@ -13,6 +15,35 @@ from maite_datasets._base import ReaderTransforms
 _logger = logging.getLogger(__name__)
 
 _TDataset = TypeVar("_TDataset", ic.Dataset, od.Dataset)
+
+DEFAULT_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp")
+DEFAULT_IMAGES_DIR = "images"
+DEFAULT_LABELS_DIR = "labels"
+DEFAULT_CLASSES_FILE = "classes.txt"
+DEFAULT_ANNOTATION_FILE = "annotations.json"
+
+
+@dataclass(frozen=True)
+class ValidationResult:
+    """Outcome of :meth:`BaseDatasetReader.validate_structure`.
+
+    Truthy when the structure is valid, so ``if reader.validate_structure():``
+    reads naturally.
+    """
+
+    issues: list[str]
+    """Human-readable descriptions of every problem found."""
+    stats: dict[str, Any]
+    """Counts describing the dataset, keyed by format-specific names."""
+
+    def __bool__(self) -> bool:
+        return not self.issues
+
+
+def _read_index2label(path: Path) -> dict[int, str]:
+    """Read a one-class-per-line file into an index -> class name mapping."""
+    with open(path) as f:
+        return dict(enumerate(line.strip() for line in f if line.strip()))
 
 
 class BaseDatasetReader(Generic[_TDataset], ABC):
@@ -30,9 +61,12 @@ class BaseDatasetReader(Generic[_TDataset], ABC):
         Dataset identifier. If None, uses dataset_path name
     """
 
+    _image_extensions: set[str] = set(DEFAULT_IMAGE_EXTENSIONS)
+
     def __init__(self, dataset_path: str | Path, dataset_id: str | None = None) -> None:
         self.dataset_path: Path = Path(dataset_path)
         self.dataset_id: str = dataset_id or self.dataset_path.name
+        self._index2label: dict[int, str] = {}
 
         # Basic path validation
         if not self.dataset_path.exists():
@@ -40,6 +74,21 @@ class BaseDatasetReader(Generic[_TDataset], ABC):
 
         # Format-specific initialization
         self._initialize_format_specific()
+
+    @property
+    def index2label(self) -> dict[int, str]:
+        """Mapping from class index to class name."""
+        return self._index2label
+
+    @classmethod
+    @abstractmethod
+    def can_read(cls, dataset_path: str | Path) -> bool:
+        """Whether this reader recognizes the layout at `dataset_path`.
+
+        Used by :func:`create_dataset_reader` to auto-detect the format, so each
+        format owns the knowledge of what its own directory layouts look like.
+        """
+        pass
 
     @abstractmethod
     def _initialize_format_specific(self) -> None:
@@ -66,59 +115,72 @@ class BaseDatasetReader(Generic[_TDataset], ABC):
         """Validate format-specific structure and return issues and stats."""
         pass
 
-    @property
-    @abstractmethod
-    def index2label(self) -> dict[int, str]:
-        """Mapping from class index to class name."""
-        pass
+    def _image_directories(self) -> list[Path]:
+        """Directories holding this reader's images.
+
+        Overridden by formats that resolve their image directories from config
+        (split layouts, custom directory names) rather than the default location.
+        """
+        return [self.dataset_path / DEFAULT_IMAGES_DIR]
+
+    def _iter_images(self, images_path: Path) -> Iterator[Path]:
+        """Yield the supported image files in `images_path` with a single directory scan."""
+        return (p for p in images_path.iterdir() if p.suffix.lower() in self._image_extensions)
+
+    def _display(self, path: Path) -> str:
+        """Render `path` relative to the dataset root when possible, for messages."""
+        try:
+            return str(path.relative_to(self.dataset_path))
+        except ValueError:
+            return str(path)
 
     def _validate_images_directory(self) -> tuple[list[str], dict[str, Any]]:
-        """Validate images directory and return issues and stats."""
-        issues = []
-        stats = {}
+        """Validate images directories and return issues and stats."""
+        issues: list[str] = []
+        num_images = 0
 
-        images_path = self.dataset_path / "images"
-        if not images_path.exists():
-            issues.append("Missing images/ directory")
-            return issues, stats
+        for images_path in self._image_directories():
+            if not images_path.exists():
+                issues.append(f"Missing {self._display(images_path)}/ directory")
+                continue
+            count = sum(1 for _ in self._iter_images(images_path))
+            if count == 0:
+                issues.append(f"No image files found in {self._display(images_path)}/ directory")
+            num_images += count
 
-        image_files = []
-        for ext in [".jpg", ".jpeg", ".png", ".bmp"]:
-            image_files.extend(images_path.glob(f"*{ext}"))
-            image_files.extend(images_path.glob(f"*{ext.upper()}"))
+        return issues, {"num_images": num_images}
 
-        stats["num_images"] = len(image_files)
-        if len(image_files) == 0:
-            issues.append("No image files found in images/ directory")
-
-        return issues, stats
-
-    def validate_structure(self) -> dict[str, Any]:
+    def validate_structure(self) -> ValidationResult:
         """
         Validate dataset directory structure and return diagnostic information.
 
         Returns
         -------
-        dict[str, Any]
-            Validation results containing:
-            - is_valid: bool indicating if structure is valid
-            - issues: list of validation issues found
-            - stats: dict with dataset statistics
+        ValidationResult
+            Truthy when valid; carries `issues` and `stats`.
         """
         # Validate images directory (common to all formats)
         issues, stats = self._validate_images_directory()
 
-        # Format-specific validation
+        # Format-specific validation. Shared keys win so a format cannot silently
+        # redefine what the common layer already measured.
         format_issues, format_stats = self._validate_format_specific()
         issues.extend(format_issues)
-        stats.update(format_stats)
 
-        return {"is_valid": len(issues) == 0, "issues": issues, "stats": stats}
+        return ValidationResult(issues, {**format_stats, **stats})
+
+
+def _readers() -> dict[str, type[BaseDatasetReader[od.Dataset]]]:
+    """Registry of supported formats, imported lazily to avoid an import cycle."""
+    from maite_datasets.object_detection._coco import COCODatasetReader
+    from maite_datasets.object_detection._yolo import YOLODatasetReader
+
+    return {"coco": COCODatasetReader, "yolo": YOLODatasetReader}
 
 
 def create_dataset_reader(
-    dataset_path: str | Path, format_hint: str | None = None
-) -> BaseDatasetReader[ic.Dataset] | BaseDatasetReader[od.Dataset]:
+    dataset_path: str | Path, format_hint: str | None = None, **kwargs: Any
+) -> BaseDatasetReader[od.Dataset]:
     """
     Factory function to create appropriate dataset reader based on directory structure.
 
@@ -127,7 +189,11 @@ def create_dataset_reader(
     dataset_path : str or Path
         Root directory containing dataset files
     format_hint : str or None, default None
-        Format hint ("coco" or "yolo"). If None, auto-detects based on file structure
+        Format hint ("coco" or "yolo"). If None, auto-detects by asking each reader
+        whether it recognizes the layout.
+    **kwargs : Any
+        Additional keyword arguments forwarded to the selected reader's constructor,
+        e.g. `image_set` or `data_yaml` for YOLO, `annotation_file` for COCO.
 
     Returns
     -------
@@ -139,35 +205,22 @@ def create_dataset_reader(
     ValueError
         If format cannot be determined or is unsupported
     """
-    from maite_datasets.object_detection._coco import COCODatasetReader
-    from maite_datasets.object_detection._yolo import YOLODatasetReader
-
+    readers = _readers()
     dataset_path = Path(dataset_path)
 
     if format_hint:
-        format_hint = format_hint.lower()
-        if format_hint == "coco":
-            return COCODatasetReader(dataset_path)
-        if format_hint == "yolo":
-            return YOLODatasetReader(dataset_path)
-        raise ValueError(f"Unsupported format hint: {format_hint}")
+        reader = readers.get(format_hint.lower())
+        if reader is None:
+            raise ValueError(f"Unsupported format hint: {format_hint}")
+        return reader(dataset_path, **kwargs)
 
-    # Auto-detect format
-    has_annotations_json = (dataset_path / "annotations.json").exists()
-    has_labels_dir = (dataset_path / "labels").exists()
-
-    if has_annotations_json and not has_labels_dir:
-        _logger.info(f"Detected COCO format for {dataset_path}")
-        return COCODatasetReader(dataset_path)
-    if has_labels_dir and not has_annotations_json:
-        _logger.info(f"Detected YOLO format for {dataset_path}")
-        return YOLODatasetReader(dataset_path)
-    if has_annotations_json and has_labels_dir:
+    matches = [name for name, reader in readers.items() if reader.can_read(dataset_path)]
+    if len(matches) == 1:
+        _logger.info(f"Detected {matches[0].upper()} format for {dataset_path}")
+        return readers[matches[0]](dataset_path, **kwargs)
+    if matches:
         raise ValueError(
-            f"Ambiguous format in {dataset_path}: both annotations.json and labels/ exist. "
+            f"Ambiguous format in {dataset_path}: {', '.join(sorted(matches))} layouts both match. "
             "Use format_hint parameter to specify format."
         )
-    raise ValueError(
-        f"Cannot detect dataset format in {dataset_path}. "
-        "Expected either annotations.json (COCO) or labels/ directory (YOLO)."
-    )
+    raise ValueError(f"Cannot detect dataset format in {dataset_path}. Expected one of: {', '.join(sorted(readers))}.")

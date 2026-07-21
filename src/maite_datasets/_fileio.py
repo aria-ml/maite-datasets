@@ -4,9 +4,12 @@ __all__ = []
 
 import hashlib
 import re
+import shutil
 import tarfile
 import zipfile
+from fnmatch import fnmatch
 from pathlib import Path
+from typing import Literal
 
 import requests
 
@@ -14,6 +17,16 @@ try:
     from tqdm.auto import tqdm
 except ImportError:
     tqdm = None
+
+try:
+    import os
+
+    os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
+    os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+    from huggingface_hub import HfApi, hf_hub_download
+except ImportError:
+    HfApi = None
+    hf_hub_download = None
 
 ARCHIVE_ENDINGS = [".zip", ".tar", ".tgz"]
 COMPRESS_ENDINGS = [".gz", ".bz2"]
@@ -180,3 +193,69 @@ def _ensure_exists(
         if file_ext in ARCHIVE_ENDINGS:
             _print(f"Extracting {filename}...", verbose)
             _extract_archive(file_ext, check_path, directory, compression, verbose)
+
+
+def _remove_folder_nest(directory: str | Path, overwrite: bool = False, verbose: bool = False) -> None:
+    """
+    Moves all files and subfolders up one level in the folder structure.
+    Checks for overwrites first and once finished, removes folder if empty.
+    """
+    source_dir = Path(directory)
+    parent_dir = source_dir.parent
+
+    # Moving everything up one level without overwrites
+    not_moved = []
+    for item in source_dir.iterdir():
+        destination = parent_dir / item.name
+        if overwrite or not destination.exists():
+            shutil.move(str(item), str(destination))
+        else:
+            not_moved.append(str(item.name))
+
+    if not any(source_dir.iterdir()):
+        source_dir.rmdir()
+
+    if not not_moved:
+        _print("All contents moved up one level successfully!", verbose)
+    else:
+        _print(f"The following files were not moved:\n\t{(', '.join(not_moved))}", verbose)
+
+
+def _hf_extract(
+    repo_id: str,
+    repo_type: Literal["dataset", "model"],
+    local_dir: Path,
+    allow_patterns: list[str] | str | None = None,
+    verbose: bool = False,
+) -> None:
+    """Downloads dataset from Huggingface to local_dir.
+
+    ``allow_patterns`` are shell-style globs matched against the repo-relative file
+    paths (``fnmatch``, so ``*`` also spans ``/``); None selects every file.
+    """
+    if HfApi is None or hf_hub_download is None:
+        raise ImportError(
+            "huggingface-hub is a required library to download from huggingface. "
+            "Either download maite-datasets[hf-hub] or pip install huggingface-hub."
+        )
+
+    api = HfApi()
+    filelist = api.list_repo_files(repo_id=repo_id, repo_type=repo_type)
+
+    if allow_patterns is None:
+        selected_files = list(filelist)
+    else:
+        patterns = [allow_patterns] if isinstance(allow_patterns, str) else list(allow_patterns)
+        selected_files = [f for f in filelist if any(fnmatch(f, pattern) for pattern in patterns)]
+    num_files = len(selected_files)
+    extra = ". This may take a while ..." if num_files > 500 else " ..."
+    _print(f"Downloading {num_files} files{extra}", verbose)
+
+    for filename in selected_files:
+        if not (local_dir / filename).exists():
+            hf_hub_download(
+                repo_id=repo_id,
+                filename=filename,
+                repo_type=repo_type,
+                local_dir=local_dir,
+            )

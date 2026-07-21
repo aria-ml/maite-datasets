@@ -2,6 +2,8 @@
 
 ## PENDING
 
+- [impr] Address code review fixes for simplification and scope
+- [deps] Add pyyaml dependency and optional hf dependency
 - [impr] Remove OpenCV dependency
 
 ## v0.0.15

@@ -9,10 +9,15 @@ from pathlib import Path
 from typing import Any, Callable
 
 import numpy as np
+import tifffile as tif
 from numpy.typing import NDArray
 from PIL import Image
 
 ArrayTransform = Callable[[NDArray[Any]], NDArray[Any]]
+ArrayLoader = Callable[[Path | str], NDArray[Any]]
+ShapeLoader = Callable[[Path | str], tuple[int, ...]]
+
+TIFF_EXTENSIONS = {".tif", ".tiff"}
 
 
 def pil_rgb_chw_load(path: Path | str) -> NDArray[np.uint8]:
@@ -25,6 +30,53 @@ def pil_rgb_chw_shape(path: Path | str) -> tuple[int, ...]:
     with Image.open(path) as im:
         w, h = im.size
     return (3, h, w)
+
+
+def tiff_chw_load(path: Path | str) -> NDArray[np.uint8]:
+    """Read a (possibly multichannel) TIFF and return it as (C, H, W)."""
+    with tif.TiffFile(path) as im:
+        series = im.series[0]
+        arr = series.asarray()
+        axes = series.axes  # e.g. "YXS", "SYX", "CYX", "YX", "QYX", etc.
+
+    if arr.ndim == 2:
+        return arr[np.newaxis, ...]
+
+    # Move whichever axis tifffile reports as the channel/sample axis to the front.
+    channel_axis = next((i for i, a in enumerate(axes) if a in "CS"), None)
+    if channel_axis is None:
+        # No explicit channel axis (e.g. a plain multi-page stack) -> treat pages as channels.
+        return arr.reshape(-1, *arr.shape[-2:])
+
+    return np.moveaxis(arr, channel_axis, 0)
+
+
+def tiff_chw_shape(path: Path | str) -> tuple[int, int, int]:
+    """Open a (possibly multichannel) TIFF and return its shape."""
+    with tif.TiffFile(path) as im:
+        series = im.series[0]
+        shape, axes = series.shape, series.axes
+        channel_axis = next((i for i, a in enumerate(axes) if a in "CSQ"), None)
+        if channel_axis is None:
+            channels = 1
+            h, w = shape[-2:]
+        else:
+            channels = shape[channel_axis]
+            hw_axes = [i for i in range(len(shape)) if i != channel_axis]
+            h, w = shape[hw_axes[-2]], shape[hw_axes[-1]]
+
+    return channels, h, w
+
+
+def chw_loaders(path: Path | str) -> tuple[ArrayLoader, ShapeLoader]:
+    """Return the ``(loader, shape_loader)`` pair matching ``path``'s extension.
+
+    Keeps the TIFF-vs-PIL decision in one place so eager and lazy access of the
+    same file always route through the same decoder.
+    """
+    if Path(path).suffix.lower() in TIFF_EXTENSIONS:
+        return tiff_chw_load, tiff_chw_shape
+    return pil_rgb_chw_load, pil_rgb_chw_shape
 
 
 class LazyArray:

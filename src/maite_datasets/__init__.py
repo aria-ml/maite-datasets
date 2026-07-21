@@ -6,10 +6,11 @@ from maite_datasets._builder import (
     to_object_detection_dataset,
 )
 from maite_datasets._collate import collate_as_list, collate_as_numpy, collate_as_torch
-from maite_datasets._reader import create_dataset_reader
+from maite_datasets._reader import ValidationResult, create_dataset_reader
 from maite_datasets._validate import validate_dataset
 
 __all__ = [
+    "ValidationResult",
     "collate_as_list",
     "collate_as_numpy",
     "collate_as_torch",

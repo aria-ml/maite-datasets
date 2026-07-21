@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import warnings
 from enum import Enum
-from typing import Callable
+from typing import Any, Callable
+
+import numpy as np
+from numpy.typing import NDArray
 
 
 class BoundingBoxFormat(Enum):
@@ -75,6 +78,40 @@ def convert_to_xyxy(
         raise ValueError(f"Unsupported bounding box format: {bbox_format}")
 
     return x0, y0, x1, y1
+
+
+def convert_to_xyxy_array(
+    boxes: NDArray[Any], bbox_format: BoundingBoxFormat, image_shape: tuple[int, ...] | None = None
+) -> NDArray[np.float64]:
+    """Vectorized :func:`convert_to_xyxy` over an ``(N, 4)`` array of boxes.
+
+    Same conversion table as the scalar form, applied to a whole image's boxes at
+    once so per-datum access does no Python-level looping. Computes in float64 to
+    match the scalar form exactly; callers cast to their storage dtype.
+    ``image_shape`` is only needed for normalized formats.
+    """
+    if boxes.size == 0:
+        return np.empty((0, 4), dtype=np.float64)
+
+    values = boxes.astype(np.float64, copy=True)
+    if bbox_format.is_normalized():
+        if image_shape is None:
+            raise ValueError(f"image_shape is required to denormalize {bbox_format}")
+        h, w = image_shape[-2], image_shape[-1]
+        values *= np.array([w, h, w, h], dtype=np.float64)
+
+    v1, v2, v3, v4 = values[:, 0], values[:, 1], values[:, 2], values[:, 3]
+
+    if bbox_format.is_xyxy():
+        if np.any(v1 > v3) or np.any(v2 > v4):
+            warnings.warn("Invalid bounding box coordinates found - swapping invalid coordinates.")
+        return np.stack([np.minimum(v1, v3), np.minimum(v2, v4), np.maximum(v1, v3), np.maximum(v2, v4)], axis=1)
+    if bbox_format.is_xywh():
+        return np.stack([v1, v2, v1 + v3, v2 + v4], axis=1)
+    if bbox_format.is_cxcywh():
+        half_w, half_h = v3 / 2, v4 / 2
+        return np.stack([v1 - half_w, v2 - half_h, v1 + half_w, v2 + half_h], axis=1)
+    raise ValueError(f"Unsupported bounding box format: {bbox_format}")
 
 
 def _is_plausible_xyxy(box: tuple[float, ...], h: int, w: int) -> bool:

@@ -8,9 +8,10 @@ from abc import abstractmethod
 from collections import namedtuple
 from collections.abc import Iterator, Sequence
 from pathlib import Path
-from typing import Any, Callable, Generic, Literal, NamedTuple, Protocol, TypeVar, cast
+from typing import Any, Callable, Generic, Literal, NamedTuple, Protocol, TypeAlias, TypeVar, cast
 
 import numpy as np
+import tifffile as tif
 from maite.protocols import DatasetMetadata, DatumMetadata
 from maite.protocols import image_classification as ic
 from maite.protocols import object_detection as od
@@ -18,7 +19,7 @@ from numpy.typing import ArrayLike, NDArray
 from PIL import Image
 
 from maite_datasets._fileio import _ensure_exists
-from maite_datasets._lazy import LazyArray
+from maite_datasets._lazy import TIFF_EXTENSIONS, LazyArray, chw_loaders, tiff_chw_load, tiff_chw_shape
 from maite_datasets.protocols import Array
 
 _T_co = TypeVar("_T_co", covariant=True)
@@ -32,6 +33,16 @@ _TRawTarget = TypeVar(
     Sequence[tuple[list[int], list[list[float]]]],
 )
 _TAnnotation = TypeVar("_TAnnotation", int, str, tuple[list[int], list[list[float]]])
+
+# Transform shapes accepted by every dataset. An image-only transform receives just
+# the image; a datum transform receives the whole (image, target, metadata) tuple and
+# is distinguished at runtime by "tuple" appearing in its parameter annotation.
+ImageTransform: TypeAlias = Callable[[_TArray], _TArray]
+DatumTransform: TypeAlias = Callable[[tuple[_TArray, _TTarget, DatumMetadata]], tuple[_TArray, _TTarget, DatumMetadata]]
+DatasetTransform: TypeAlias = ImageTransform[_TArray] | DatumTransform[_TArray, _TTarget]
+DatasetTransforms: TypeAlias = (
+    DatasetTransform[_TArray, _TTarget] | Sequence[DatasetTransform[_TArray, _TTarget]] | None
+)
 
 # Object detection targets. These use the functional ``namedtuple`` factory function so
 # the tuple works with TorchVision
@@ -69,41 +80,15 @@ class Dataset(Generic[_T_co]):
     """Abstract generic base class for PyTorch style Dataset"""
 
     def __getitem__(self, index: int) -> _T_co: ...
-    def __add__(self, other: Dataset[_T_co]) -> Dataset[_T_co]: ...
 
 
 class BaseDataset(Dataset[tuple[_TArray, _TTarget, DatumMetadata]]):
     metadata: DatasetMetadata
 
-    def __init__(
-        self,
-        transforms: Callable[[_TArray], _TArray]
-        | Callable[
-            [tuple[_TArray, _TTarget, DatumMetadata]],
-            tuple[_TArray, _TTarget, DatumMetadata],
-        ]
-        | Sequence[
-            Callable[[_TArray], _TArray]
-            | Callable[
-                [tuple[_TArray, _TTarget, DatumMetadata]],
-                tuple[_TArray, _TTarget, DatumMetadata],
-            ]
-        ]
-        | None,
-    ) -> None:
-        self.transforms: list[
-            Callable[
-                [tuple[_TArray, _TTarget, DatumMetadata]],
-                tuple[_TArray, _TTarget, DatumMetadata],
-            ]
-        ] = []
-        self._image_transforms: list[Callable[[_TArray], _TArray]] = []
-        self._tuple_only_transforms: list[
-            Callable[
-                [tuple[_TArray, _TTarget, DatumMetadata]],
-                tuple[_TArray, _TTarget, DatumMetadata],
-            ]
-        ] = []
+    def __init__(self, transforms: DatasetTransforms[_TArray, _TTarget]) -> None:
+        self.transforms: list[DatumTransform[_TArray, _TTarget]] = []
+        self._image_transforms: list[ImageTransform[_TArray]] = []
+        self._tuple_only_transforms: list[DatumTransform[_TArray, _TTarget]] = []
         self._lazy: bool = False
         transforms = transforms if isinstance(transforms, Sequence) else [transforms] if transforms else []
         for transform in transforms:
@@ -202,6 +187,28 @@ class DataLocation(NamedTuple):
     checksum: str
 
 
+def _dataset_dir(root: Path, name: str) -> Path:
+    """Resolve (and create) the per-dataset folder named after `name` under `root`.
+
+    `root` is used as-is when it already points at that folder, so passing either the
+    parent or the dataset folder itself works.
+    """
+    dataset_dir = root if root.stem.lower() == name.lower() else root / name.lower()
+    dataset_dir.mkdir(parents=True, exist_ok=True)
+    return dataset_dir
+
+
+def _merge_datum_metadata(datum_metadata: dict[str, list[Any]], addition: dict[str, Any]) -> None:
+    """Append `addition`'s per-datum lists onto `datum_metadata` in place.
+
+    Loaders that accumulate several resources/groups into one dataset must extend the
+    existing lists; ``dict.update`` would replace them, leaving metadata shorter than
+    ``_filepaths`` and desynchronized from it.
+    """
+    for key, val in addition.items():
+        datum_metadata.setdefault(str(key), []).extend(val)
+
+
 class BaseDownloadedDataset(
     BaseDataset[_TArray, _TTarget],
     Generic[_TArray, _TTarget, _TRawTarget, _TAnnotation],
@@ -224,28 +231,18 @@ class BaseDownloadedDataset(
         self,
         root: str | Path,
         image_set: Literal["train", "val", "test", "operational", "base"] = "train",
-        transforms: Callable[[_TArray], _TArray]
-        | Callable[
-            [tuple[_TArray, _TTarget, DatumMetadata]],
-            tuple[_TArray, _TTarget, DatumMetadata],
-        ]
-        | Sequence[
-            Callable[[_TArray], _TArray]
-            | Callable[
-                [tuple[_TArray, _TTarget, DatumMetadata]],
-                tuple[_TArray, _TTarget, DatumMetadata],
-            ]
-        ]
-        | None = None,
+        transforms: DatasetTransforms[_TArray, _TTarget] = None,
         download: bool = False,
         verbose: bool = False,
         lazy: bool = False,
+        hf: bool = False,
     ) -> None:
         super().__init__(transforms)
         self.lazy = lazy
         self._root: Path = root.absolute() if isinstance(root, Path) else Path(root).absolute()
         self.image_set = image_set
         self._verbose = verbose
+        self.hf_dataset = hf
 
         # Internal Attributes
         self._download = download
@@ -265,7 +262,10 @@ class BaseDownloadedDataset(
 
         # Load the data
         self.path: Path = self._get_dataset_dir()
-        self._filepaths, self._targets, self._datum_metadata = self._load_data()
+        if self.hf_dataset:
+            self._filepaths, self._targets, self._datum_metadata = self._load_hf_data()
+        else:
+            self._filepaths, self._targets, self._datum_metadata = self._load_data()
         self.size: int = len(self._filepaths)
 
     @property
@@ -278,13 +278,7 @@ class BaseDownloadedDataset(
 
     def _get_dataset_dir(self) -> Path:
         # Create a designated folder for this dataset (named after the class)
-        if self._root.stem.lower() == self.__class__.__name__.lower():
-            dataset_dir: Path = self._root
-        else:
-            dataset_dir: Path = self._root / self.__class__.__name__.lower()
-        if not dataset_dir.exists():
-            dataset_dir.mkdir(parents=True, exist_ok=True)
-        return dataset_dir
+        return _dataset_dir(self._root, self.__class__.__name__)
 
     def _unique_id(self) -> str:
         return f"{self.__class__.__name__}_{self.image_set}"
@@ -308,31 +302,50 @@ class BaseDownloadedDataset(
     @abstractmethod
     def _load_data_inner(self) -> tuple[list[str], _TRawTarget, dict[str, Any]]: ...
 
+    @abstractmethod
+    def _load_hf_data(self) -> tuple[list[str], _TRawTarget, dict[str, Any]]: ...
+
     def _to_datum_metadata(self, index: int, metadata: dict[str, Any]) -> DatumMetadata:
         _id = metadata.pop("id", index)
         return DatumMetadata(id=_id, **metadata)
 
-    def _get_image(self, path: str) -> _TArray:
+    def _get_image(
+        self,
+        path: str,
+        extra_pending: Sequence[Callable[[NDArray[Any]], NDArray[Any]]] | None = None,
+    ) -> _TArray:
         """Return the image for ``path``. Yields a :class:`LazyArray` when ``self._lazy``.
 
-        Pending image-only transforms are only attached when the pipeline has no
+        ``extra_pending`` holds per-datum image operations the dataset itself needs
+        (e.g. cropping to one annotated object). They run before any user transform
+        and are always scheduled, so a dataset that reshapes its images stays lazy
+        instead of forcing a decode in ``__getitem__``.
+
+        User image-only transforms are only attached when the pipeline has no
         tuple-style transforms; otherwise ``_transform`` materializes and runs
         ``self.transforms`` (which already includes the wrapped image-only
         transforms), and attaching them to ``pending`` would double-apply.
         """
         mixin = cast(BaseDatasetMixin[_TArray], self)
+        user_pending = [] if self._tuple_only_transforms else self._image_transforms
+        pending = [*(extra_pending or []), *user_pending]
         if self._lazy:
-            pending = None if self._tuple_only_transforms else self._image_transforms or None
             return cast(
                 _TArray,
                 LazyArray(
                     path,
                     loader=cast(Callable[[str], NDArray[Any]], mixin._read_file),
                     shape_loader=mixin._read_shape,
-                    pending=cast("Sequence[Callable[[NDArray[Any]], NDArray[Any]]] | None", pending),
+                    pending=cast(
+                        "Sequence[Callable[[NDArray[Any]], NDArray[Any]]] | None",
+                        pending or None,
+                    ),
                 ),
             )
-        return mixin._read_file(path)
+        image = mixin._read_file(path)
+        for transform in extra_pending or []:
+            image = cast(_TArray, transform(cast(NDArray[Any], image)))
+        return image
 
     def __len__(self) -> int:
         return self.size
@@ -402,10 +415,14 @@ class BaseODDataset(
         img = self._get_image(self._filepaths[index])
         img_size = img.shape
         # Adjust labels if necessary
+        scaled_boxes: Any = boxes
         if self._bboxes_per_size and boxes:
-            boxes = boxes * np.asarray([[img_size[1], img_size[2], img_size[1], img_size[2]]])
+            scale = np.asarray([[img_size[1], img_size[2], img_size[1], img_size[2]]])
+            scaled_boxes = (np.asarray(boxes) * scale).astype(np.int32)
         # Create the Object Detection Target
-        target = ObjectDetectionTargetTuple(self._as_array(boxes), self._as_array(labels), self._one_hot_encode(labels))
+        target = ObjectDetectionTargetTuple(
+            self._as_array(scaled_boxes), self._as_array(labels), self._one_hot_encode(labels)
+        )
         # Cast target explicitly to ODTarget as namedtuple does not provide any typing metadata
         target = cast(_TODTarget, target)
 
@@ -444,6 +461,9 @@ class BaseDatasetNumpyMixin(BaseDatasetMixin[NumpyArray]):
         return encoded
 
     def _read_file(self, path: str) -> NumpyArray:
+        ext = Path(path).suffix.lower()
+        if ext in TIFF_EXTENSIONS:
+            return tiff_chw_load(path)
         return np.array(Image.open(path)).transpose(2, 0, 1)
 
     def _read_shape(self, path: str) -> tuple[int, ...]:
@@ -451,33 +471,140 @@ class BaseDatasetNumpyMixin(BaseDatasetMixin[NumpyArray]):
 
         Falls back to decoding the file via ``_read_file`` when the path is
         not a real image file (e.g. integer-index strings used by in-memory
-        datasets like MNIST/CIFAR).
+        datasets like MNIST/CIFAR), or when TIFF axis metadata can't be
+        interpreted cheaply.
         """
+        ext = Path(path).suffix.lower()
         try:
-            with Image.open(path) as im:
-                channels = len(im.getbands())
-                w, h = im.size
-        except (FileNotFoundError, OSError, ValueError):
+            if ext in TIFF_EXTENSIONS:
+                channels, h, w = tiff_chw_shape(path)
+            else:
+                with Image.open(path) as im:
+                    channels = len(im.getbands())
+                    w, h = im.size
+        except (FileNotFoundError, OSError, ValueError, tif.TiffFileError):
             return self._read_file(path).shape
         return (channels, h, w)
 
 
-NumpyImageTransform = Callable[[NumpyArray], NumpyArray]
-NumpyImageClassificationDatumTransform = Callable[
-    [tuple[NumpyArray, NumpyArray, DatumMetadata]],
-    tuple[NumpyArray, NumpyArray, DatumMetadata],
-]
-NumpyObjectDetectionDatumTransform = Callable[
-    [tuple[NumpyArray, NumpyObjectDetectionTarget, DatumMetadata]],
-    tuple[NumpyArray, NumpyObjectDetectionTarget, DatumMetadata],
-]
-NumpyImageClassificationTransform = NumpyImageTransform | NumpyImageClassificationDatumTransform
-NumpyObjectDetectionTransform = NumpyImageTransform | NumpyObjectDetectionDatumTransform
+NumpyImageTransform: TypeAlias = ImageTransform[NumpyArray]
+NumpyImageClassificationDatumTransform: TypeAlias = DatumTransform[NumpyArray, NumpyArray]
+NumpyObjectDetectionDatumTransform: TypeAlias = DatumTransform[NumpyArray, NumpyObjectDetectionTarget]
+NumpyImageClassificationTransform: TypeAlias = DatasetTransform[NumpyArray, NumpyArray]
+NumpyObjectDetectionTransform: TypeAlias = DatasetTransform[NumpyArray, NumpyObjectDetectionTarget]
 
 # Transform type accepted by reader-created datasets. Reader images satisfy the
 # ``Array`` protocol (numpy ndarray when eager, LazyArray when lazy), so the alias
 # is expressed against ``Array`` rather than a concrete array type.
-ReaderTransform = (
-    Callable[[Array], Array] | Callable[[tuple[Array, Any, DatumMetadata]], tuple[Array, Any, DatumMetadata]]
-)
-ReaderTransforms = ReaderTransform | Sequence[ReaderTransform] | None
+ReaderTransform: TypeAlias = DatasetTransform[Array, Any]
+ReaderTransforms: TypeAlias = DatasetTransforms[Array, Any]
+
+
+class LazyAnnotations(Sequence[dict[str, Any]]):
+    """Per-box annotation metadata that is only materialized when read.
+
+    Behaves like the ``list[dict]`` it replaces - indexing, iteration, ``len`` and
+    equality all work - but a training loop that never touches the ``annotations``
+    key of a datum's metadata pays nothing for it. ``len`` is answered from the
+    known count without building anything.
+    """
+
+    __slots__ = ("_build", "_count", "_records")
+
+    def __init__(self, count: int, build: Callable[[], list[dict[str, Any]]]) -> None:
+        self._count = count
+        self._build = build
+        self._records: list[dict[str, Any]] | None = None
+
+    @property
+    def records(self) -> list[dict[str, Any]]:
+        """The materialized annotation dicts, built on first access."""
+        if self._records is None:
+            self._records = self._build()
+        return self._records
+
+    def __len__(self) -> int:
+        return self._count
+
+    def __getitem__(self, index: Any) -> Any:
+        return self.records[index]
+
+    def __eq__(self, other: object) -> bool:
+        return self.records == (other.records if isinstance(other, LazyAnnotations) else other)
+
+    def __repr__(self) -> str:
+        state = "built" if self._records is not None else "pending"
+        return f"LazyAnnotations({self._count} annotations, {state})"
+
+
+class BaseReaderDataset(BaseDataset[Array, _TTarget]):
+    """Shared implementation for datasets backed by a :class:`BaseDatasetReader`.
+
+    Owns the reader handle, the public attribute block that :meth:`BaseDataset.__str__`
+    renders, and the single eager-vs-lazy image load, so every reader format decodes
+    the same way and schedules pending image transforms identically.
+
+    Parameters
+    ----------
+    reader : BaseDatasetReader
+        Reader providing the resolved paths and parsed annotations.
+    size : int
+        Number of data points the reader indexed.
+    lazy : bool, default False
+        When True, the image element of each datum is returned as a
+        :class:`LazyArray` that defers decode until first numpy access.
+    transforms : ReaderTransforms, default None
+        Optional image-only or datum-tuple transform(s) applied to each datum
+        on access via the inherited transform pipeline.
+    """
+
+    def __init__(
+        self,
+        reader: Any,
+        size: int,
+        lazy: bool = False,
+        transforms: ReaderTransforms = None,
+    ) -> None:
+        super().__init__(transforms)
+        self._reader = reader
+        self.lazy = lazy
+
+        self.path: Path = reader.dataset_path
+        self.size: int = size
+        self.classes: dict[int, str] = reader.index2label
+        self.metadata: DatasetMetadata = DatasetMetadata(
+            id=reader.dataset_id,
+            index2label=reader.index2label,
+        )
+
+    def __len__(self) -> int:
+        return self.size
+
+    def _get_image(self, path: Path) -> Array:
+        """Return the image at `path`, deferring decode when ``self.lazy``.
+
+        Pending image-only transforms ride along inside the :class:`LazyArray` so
+        ``_transform``'s lazy short-circuit still applies them at materialization.
+        """
+        loader, shape_loader = chw_loaders(path)
+        if not self._lazy:
+            return loader(path)
+        pending = None if self._tuple_only_transforms else self._image_transforms or None
+        return LazyArray(
+            str(path),
+            loader=cast(Callable[[str], NDArray[Any]], loader),
+            shape_loader=cast(Callable[[str], tuple[int, ...]], shape_loader),
+            pending=cast("Sequence[Callable[[NDArray[Any]], NDArray[Any]]] | None", pending),
+        )
+
+    def _get_shape(self, path: Path, image: Array) -> tuple[int, ...]:
+        """Shape of the stored image, without forcing a decode in lazy mode.
+
+        ``LazyArray.shape`` materializes once transforms are pending, so probe the
+        header directly instead; both modes then size boxes against the on-disk
+        image, before any transform runs.
+        """
+        if not self._lazy:
+            return image.shape
+        _, shape_loader = chw_loaders(path)
+        return shape_loader(path)

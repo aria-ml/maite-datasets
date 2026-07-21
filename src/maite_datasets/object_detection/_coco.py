@@ -4,15 +4,47 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple, cast
 
 import maite.protocols.object_detection as od
 import numpy as np
-from maite.protocols import DatasetMetadata, DatumMetadata
+from maite.protocols import DatumMetadata
+from numpy.typing import NDArray
 
-from maite_datasets._base import BaseDataset, ObjectDetectionTargetTuple, ReaderTransforms
-from maite_datasets._lazy import LazyArray, pil_rgb_chw_load, pil_rgb_chw_shape
-from maite_datasets._reader import BaseDatasetReader
+from maite_datasets._base import (
+    BaseReaderDataset,
+    LazyAnnotations,
+    ObjectDetectionTargetTuple,
+    ReaderTransforms,
+)
+from maite_datasets._bbox import BoundingBoxFormat, convert_to_xyxy_array
+from maite_datasets._reader import (
+    DEFAULT_ANNOTATION_FILE,
+    DEFAULT_CLASSES_FILE,
+    DEFAULT_IMAGES_DIR,
+    BaseDatasetReader,
+    _read_index2label,
+)
+from maite_datasets.protocols import Array
+
+
+class TargetIndex(NamedTuple):
+    """Every image's boxes and labels, stored flat with per-image offsets.
+
+    Image `i` owns rows ``offsets[i]:offsets[i + 1]``; slicing yields numpy views,
+    so per-datum access allocates nothing.
+    """
+
+    boxes: NDArray[np.float32]
+    """(total_boxes, 4) absolute x1, y1, x2, y2."""
+    labels: NDArray[np.int64]
+    """(total_boxes,) class index per box."""
+    offsets: NDArray[np.int64]
+    """(num_images + 1,) start of each image's rows."""
+
+    def rows(self, index: int) -> slice:
+        """Row range owned by image `index`."""
+        return slice(int(self.offsets[index]), int(self.offsets[index + 1]))
 
 
 class COCODatasetReader(BaseDatasetReader[od.Dataset]):
@@ -101,17 +133,41 @@ class COCODatasetReader(BaseDatasetReader[od.Dataset]):
     def __init__(
         self,
         dataset_path: str | Path,
-        annotation_file: str = "annotations.json",
-        images_dir: str = "images",
-        classes_file: str | None = "classes.txt",
+        annotation_file: str = DEFAULT_ANNOTATION_FILE,
+        images_dir: str = DEFAULT_IMAGES_DIR,
+        classes_file: str | None = DEFAULT_CLASSES_FILE,
         dataset_id: str | None = None,
     ) -> None:
-        self._annotation_file = annotation_file
-        self._images_dir = images_dir
-        self._classes_file = classes_file
+        self._annotation_file: str = annotation_file
+        self._images_dir: str = images_dir
+        self._classes_file: str | None = classes_file
+
+        # Resolved by _initialize_format_specific(), which the base class calls once
+        # dataset_path has been validated.
+        self._images_path: Path = Path()
+        self._annotation_path: Path = Path()
+        self._classes_path: Path | None = None
+        self._coco_data: dict[str, list[dict[str, Any]]] = {}
+        self._image_ids: list[int] = []
+        self._image_id_to_info: dict[int, dict[str, Any]] = {}
+        self._category_id_to_idx: dict[int, int] = {}
+        self._image_id_to_annotations: dict[int, list[dict[str, Any]]] = {}
+        self._target_index: TargetIndex = TargetIndex(
+            np.empty((0, 4), dtype=np.float32), np.empty(0, dtype=np.int64), np.zeros(1, dtype=np.int64)
+        )
 
         # Initialize base class
         super().__init__(dataset_path, dataset_id)
+
+    @classmethod
+    def can_read(cls, dataset_path: str | Path) -> bool:
+        """True when `dataset_path` holds a COCO annotation file.
+
+        Recognizes both the flat `annotations.json` and the upstream
+        `annotations/*.json` layout.
+        """
+        path = Path(dataset_path)
+        return (path / DEFAULT_ANNOTATION_FILE).exists() or any((path / "annotations").glob("*.json"))
 
     def _initialize_format_specific(self) -> None:
         """Initialize COCO-specific components."""
@@ -127,9 +183,36 @@ class COCODatasetReader(BaseDatasetReader[od.Dataset]):
         self._load_annotations()
 
     @property
-    def index2label(self) -> dict[int, str]:
-        """Mapping from class index to class name."""
-        return self._index2label
+    def images_path(self) -> Path:
+        """Directory holding the image files referenced by the annotations."""
+        return self._images_path
+
+    @property
+    def annotation_path(self) -> Path:
+        """Path to the COCO annotation JSON file."""
+        return self._annotation_path
+
+    @property
+    def image_ids(self) -> list[int]:
+        """COCO image ids in dataset order."""
+        return self._image_ids
+
+    def image_info(self, image_id: int) -> dict[str, Any]:
+        """The `images` record for `image_id`."""
+        return self._image_id_to_info[image_id]
+
+    def annotations_for(self, image_id: int) -> list[dict[str, Any]]:
+        """Annotation records belonging to `image_id`, empty when it has none."""
+        return self._image_id_to_annotations.get(image_id, [])
+
+    def category_index(self, category_id: int) -> int:
+        """Class index for a COCO `category_id`."""
+        return self._category_id_to_idx[category_id]
+
+    @property
+    def target_index(self) -> TargetIndex:
+        """All boxes and labels, converted once at init and sliced per image."""
+        return self._target_index
 
     def create_dataset(self, lazy: bool = False, transforms: ReaderTransforms = None) -> od.Dataset:
         """Create COCO dataset implementation.
@@ -144,72 +227,89 @@ class COCODatasetReader(BaseDatasetReader[od.Dataset]):
         """
         return COCODataset(self, lazy=lazy, transforms=transforms)
 
+    def _image_directories(self) -> list[Path]:
+        return [self._images_path]
+
     def _validate_format_specific(self) -> tuple[list[str], dict[str, Any]]:
-        """Validate COCO format specific files and structure."""
-        issues = []
-        stats = {}
+        """Validate COCO format specific files and structure.
 
-        annotation_path = self.dataset_path / self._annotation_file
-        if not annotation_path.exists():
-            issues.append(f"Missing {self._annotation_file} file")
-            return issues, stats
+        Reports on the annotations already parsed at init rather than re-reading
+        them, so the diagnostics always describe what the reader actually loaded.
+        """
+        issues: list[str] = []
+        stats: dict[str, Any] = {
+            "num_image_records": len(self._image_id_to_info),
+            "num_annotations": sum(len(anns) for anns in self._image_id_to_annotations.values()),
+            "num_categories": len(self._category_id_to_idx),
+            "num_class_names": len(self._index2label),
+        }
 
-        try:
-            with open(annotation_path) as f:
-                coco_data = json.load(f)
-        except json.JSONDecodeError as e:
-            issues.append(f"Invalid JSON in {self._annotation_file}: {e}")
-            return issues, stats
-
-        # Check required keys
-        required_keys = ["images", "annotations", "categories"]
-        for key in required_keys:
-            if key not in coco_data:
+        for key in ("images", "annotations", "categories"):
+            if key not in self._coco_data:
                 issues.append(f"Missing required key '{key}' in {self._annotation_file}")
-            else:
-                stats[f"num_{key}"] = len(coco_data[key])
 
-        # Check optional classes.txt
-        if self._classes_file:
-            classes_path = self.dataset_path / self._classes_file
-            if classes_path.exists():
-                try:
-                    with open(classes_path) as f:
-                        class_lines = [line.strip() for line in f if line.strip()]
-                    stats["num_class_names"] = len(class_lines)
-                except Exception as e:
-                    issues.append(f"Error reading {self._classes_file}: {e}")
+        missing = [
+            info["file_name"]
+            for info in self._image_id_to_info.values()
+            if not (self._images_path / info["file_name"]).exists()
+        ]
+        if missing:
+            issues.append(f"{len(missing)} annotated image file(s) not found, e.g. {missing[0]}")
 
         return issues, stats
 
     def _load_annotations(self) -> None:
         """Load and parse COCO annotations."""
-        with open(self._annotation_path) as f:
-            self._coco_data = json.load(f)
+        try:
+            with open(self._annotation_path) as f:
+                self._coco_data = json.load(f)
+        except json.JSONDecodeError as e:
+            raise json.JSONDecodeError(f"Invalid JSON in {self._annotation_file}: {e.msg}", e.doc, e.pos) from e
 
         # Build mappings
-        self._image_id_to_info = {img["id"]: img for img in self._coco_data["images"]}
-        self._category_id_to_idx = {cat["id"]: idx for idx, cat in enumerate(self._coco_data["categories"])}
+        self._image_id_to_info = {img["id"]: img for img in self._coco_data.get("images", [])}
+        self._image_ids = list(self._image_id_to_info)
+        self._category_id_to_idx = {cat["id"]: idx for idx, cat in enumerate(self._coco_data.get("categories", []))}
 
         # Group annotations by image
-        self.image_id_to_annotations: dict[int, list[dict[str, Any]]] = {}
-        for ann in self._coco_data["annotations"]:
-            img_id = ann["image_id"]
-            if img_id not in self.image_id_to_annotations:
-                self.image_id_to_annotations[img_id] = []
-            self.image_id_to_annotations[img_id].append(ann)
+        for ann in self._coco_data.get("annotations", []):
+            self._image_id_to_annotations.setdefault(ann["image_id"], []).append(ann)
 
-        # Load class names
-        if self._classes_path and self._classes_path.exists():
-            with open(self._classes_path) as f:
-                class_names = [line.strip() for line in f if line.strip()]
-        else:
-            class_names = [cat["name"] for cat in self._coco_data["categories"]]
+        # Load class names, preferring the classes file over the embedded category names
+        self._index2label = (
+            _read_index2label(self._classes_path)
+            if self._classes_path and self._classes_path.exists()
+            else dict(enumerate(str(cat["name"]) for cat in self._coco_data.get("categories", [])))
+        )
 
-        self._index2label = dict(enumerate(class_names))
+        self._target_index = self._build_target_index()
+
+    def _build_target_index(self) -> TargetIndex:
+        """Convert every annotation to its final box and label exactly once.
+
+        COCO boxes are already in absolute pixels, so nothing about them depends on
+        the image being loaded - the conversion belongs here, not in the hot path.
+        """
+        boxes: list[list[float]] = []
+        labels: list[int] = []
+        offsets: list[int] = [0]
+
+        for image_id in self._image_ids:
+            for ann in self._image_id_to_annotations.get(image_id, []):
+                boxes.append(ann["bbox"])
+                labels.append(self._category_id_to_idx[ann["category_id"]])
+            offsets.append(len(labels))
+
+        return TargetIndex(
+            convert_to_xyxy_array(np.array(boxes, dtype=np.float64).reshape(-1, 4), BoundingBoxFormat.XYWH).astype(
+                np.float32
+            ),
+            np.array(labels, dtype=np.int64),
+            np.array(offsets, dtype=np.int64),
+        )
 
 
-class COCODataset(BaseDataset):
+class COCODataset(BaseReaderDataset[od.ObjectDetectionTarget]):
     """Internal COCO dataset implementation.
 
     Parameters
@@ -225,77 +325,51 @@ class COCODataset(BaseDataset):
         on access via the inherited transform pipeline.
     """
 
+    _RESERVED_ANNOTATION_KEYS = frozenset({"id", "image_id", "category_id", "bbox", "area", "iscrowd"})
+
     def __init__(self, reader: COCODatasetReader, lazy: bool = False, transforms: ReaderTransforms = None) -> None:
-        super().__init__(transforms)
-        self._reader = reader
-        self._image_ids = list(reader._image_id_to_info.keys())
-        self.lazy = lazy
+        super().__init__(reader, len(reader.image_ids), lazy, transforms)
+        self._reader: COCODatasetReader = reader
+        self.images_path: Path = reader.images_path
+        self.annotation_path: Path = reader.annotation_path
 
-        self.root = reader.dataset_path
-        self.images_path = reader._images_path
-        self.annotation_path = reader._annotation_path
-        self.size = len(reader._image_id_to_info)
-        self.classes = reader.index2label
-        self.metadata = DatasetMetadata(
-            id=self._reader.dataset_id,
-            index2label=self._reader.index2label,
-        )
-
-    def __len__(self) -> int:
-        return len(self._image_ids)
-
-    def __getitem__(self, index: int) -> tuple[od.InputType, od.ObjectDetectionTarget, DatumMetadata]:
-        image_id = self._image_ids[index]
-        image_info = self._reader._image_id_to_info[image_id]
+    def __getitem__(self, index: int) -> tuple[Array, od.ObjectDetectionTarget, DatumMetadata]:
+        image_id = self._reader.image_ids[index]
+        image_info = self._reader.image_info(image_id)
 
         # Load image (lazy when self.lazy)
-        image_path = self._reader._images_path / image_info["file_name"]
-        if self.lazy:
-            image = LazyArray(str(image_path), loader=pil_rgb_chw_load, shape_loader=pil_rgb_chw_shape)
-        else:
-            image = pil_rgb_chw_load(image_path)
+        image_path = self._reader.images_path / image_info["file_name"]
+        image = self._get_image(image_path)
 
-        # Get annotations for this image
-        annotations = self._reader.image_id_to_annotations.get(image_id, [])
+        target_index = self._reader.target_index
+        rows = target_index.rows(index)
+        labels = target_index.labels[rows]
 
-        if annotations:
-            boxes = []
-            labels = []
-            annotation_metadata = []
+        target = cast(
+            od.ObjectDetectionTarget,
+            ObjectDetectionTargetTuple(
+                target_index.boxes[rows],
+                labels,
+                np.ones(len(labels), dtype=np.float32),  # Ground truth scores
+            ),
+        )
 
-            for ann in annotations:
-                # Convert COCO bbox (x, y, w, h) to (x1, y1, x2, y2)
-                x, y, w, h = ann["bbox"]
-                boxes.append([x, y, x + w, y + h])
-
-                # Map category_id to class index
-                cat_idx = self._reader._category_id_to_idx[ann["category_id"]]
-                labels.append(cat_idx)
-
-                # Collect annotation metadata
-                ann_meta = {
+        # Per-box records, materialized only if the caller reads them
+        annotations = self._reader.annotations_for(image_id)
+        annotation_metadata = LazyAnnotations(
+            len(annotations),
+            lambda: [
+                {
                     "annotation_id": ann["id"],
                     "category_id": ann["category_id"],
                     "area": ann.get("area", 0),
                     "iscrowd": ann.get("iscrowd", 0),
+                    # Carry any non-standard fields through
+                    **{f"ann_{k}": v for k, v in ann.items() if k not in self._RESERVED_ANNOTATION_KEYS},
                 }
-                # Add any additional fields from annotation
-                for key, value in ann.items():
-                    if key not in ["id", "image_id", "category_id", "bbox", "area", "iscrowd"]:
-                        ann_meta[f"ann_{key}"] = value
-                annotation_metadata.append(ann_meta)
-
-            boxes = np.array(boxes, dtype=np.float32)
-            labels = np.array(labels, dtype=np.int64)
-            scores = np.ones(len(labels), dtype=np.float32)  # Ground truth scores
-        else:
-            # Empty annotations
-            boxes = np.empty((0, 4), dtype=np.float32)
-            labels = np.empty(0, dtype=np.int64)
-            scores = np.empty(0, dtype=np.float32)
-            annotation_metadata = []
-
-        target = ObjectDetectionTargetTuple(boxes, labels, scores)
+                for ann in annotations
+            ],
+        )
 
         # Create comprehensive datum metadata
         datum_metadata = DatumMetadata(

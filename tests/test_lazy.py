@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+import tifffile as tif
 from PIL import Image
 
-from maite_datasets._lazy import LazyArray
+from maite_datasets._lazy import LazyArray, chw_loaders, tiff_chw_load, tiff_chw_shape
 from maite_datasets.protocols import Array
 
 
@@ -164,3 +165,44 @@ class TestLazyArray:
         arr = np.array(lazy)  # default np.array copies
         np.asarray(lazy)[0, 0, 0] = 99
         assert arr[0, 0, 0] != 99
+
+
+@pytest.fixture
+def gray_tiff(tmp_path):
+    path = tmp_path / "gray.tiff"
+    tif.imwrite(path, np.arange(6 * 8, dtype=np.uint8).reshape(6, 8))
+    return path
+
+
+@pytest.fixture
+def rgb_tiff(tmp_path):
+    path = tmp_path / "rgb.tiff"
+    tif.imwrite(path, np.arange(6 * 8 * 3, dtype=np.uint8).reshape(6, 8, 3))
+    return path
+
+
+class TestTiffLoaders:
+    def test_grayscale_gets_channel_axis(self, gray_tiff):
+        assert tiff_chw_load(gray_tiff).shape == (1, 6, 8)
+        assert tiff_chw_shape(gray_tiff) == (1, 6, 8)
+
+    def test_sample_axis_moved_to_front(self, rgb_tiff):
+        arr = tiff_chw_load(rgb_tiff)
+        assert arr.shape == (3, 6, 8)
+        assert tiff_chw_shape(rgb_tiff) == (3, 6, 8)
+        # Same pixels, just reordered from the stored HWC layout
+        assert np.array_equal(arr, np.moveaxis(tif.imread(rgb_tiff), 2, 0))
+
+    @pytest.mark.parametrize("fixture, expected", [("gray_tiff", (1, 6, 8)), ("rgb_tiff", (3, 6, 8))])
+    def test_chw_loaders_routes_tiffs(self, request, fixture, expected):
+        path = request.getfixturevalue(fixture)
+        loader, shape_loader = chw_loaders(path)
+        assert loader is tiff_chw_load
+        assert shape_loader(path) == expected
+        assert loader(path).shape == expected
+
+    def test_lazy_tiff_materializes_through_loaders(self, rgb_tiff):
+        loader, shape_loader = chw_loaders(rgb_tiff)
+        lazy = LazyArray(str(rgb_tiff), loader=loader, shape_loader=shape_loader)
+        assert lazy.shape == (3, 6, 8)
+        assert np.asarray(lazy).shape == (3, 6, 8)

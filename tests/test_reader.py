@@ -9,7 +9,7 @@ import pytest
 from PIL import Image
 
 # Import the modules to test
-from maite_datasets._reader import BaseDatasetReader, create_dataset_reader
+from maite_datasets._reader import BaseDatasetReader, ValidationResult, create_dataset_reader
 from maite_datasets.object_detection._coco import COCODatasetReader
 from maite_datasets.object_detection._yolo import YOLODatasetReader
 
@@ -125,6 +125,23 @@ def temp_yolo_dataset(tmp_path, sample_yolo_labels, sample_classes):
     return tmp_path
 
 
+@pytest.fixture
+def temp_yolo_split_dataset(tmp_path):
+    """YOLO dataset described by a data.yaml, with per-split images/labels dirs."""
+    for split in ("train", "val"):
+        images_dir = tmp_path / split / "images"
+        labels_dir = tmp_path / split / "labels"
+        images_dir.mkdir(parents=True)
+        labels_dir.mkdir(parents=True)
+        Image.new("RGB", (640, 480), color="blue").save(images_dir / f"{split}1.jpg")
+        (labels_dir / f"{split}1.txt").write_text("0 0.5 0.3 0.2 0.4\n")
+
+    (tmp_path / "data.yaml").write_text(
+        "train: train/images\nval: val/images\nnc: 2\nnames: [person, car]\n",
+    )
+    return tmp_path
+
+
 class TestBaseDatasetReader:
     """Test the BaseDatasetReader abstract base class."""
 
@@ -153,10 +170,10 @@ class TestBaseDatasetReader:
 
         # Test validation method
         result = reader.validate_structure()
-        assert isinstance(result, dict)
-        assert "is_valid" in result
-        assert "issues" in result
-        assert "stats" in result
+        assert isinstance(result, ValidationResult)
+        assert bool(result) is True
+        assert result.issues == []
+        assert result.stats
 
 
 class TestCOCODatasetReader:
@@ -459,6 +476,25 @@ class TestCreateDatasetReader:
         with pytest.raises(ValueError, match="Cannot detect dataset format"):
             create_dataset_reader(tmp_path)
 
+    def test_auto_detect_yolo_data_yaml_layout(self, temp_yolo_split_dataset):
+        """A data.yaml split layout has no root labels/ dir but is still YOLO."""
+        assert not (temp_yolo_split_dataset / "labels").exists()
+
+        reader = create_dataset_reader(temp_yolo_split_dataset)
+        assert isinstance(reader, YOLODatasetReader)
+        assert len(reader.image_files) == 1
+
+    def test_kwargs_forwarded_to_reader(self, temp_yolo_split_dataset):
+        """Reader-specific options reach the constructor through the factory."""
+        reader = create_dataset_reader(temp_yolo_split_dataset, image_set="val")
+        assert isinstance(reader, YOLODatasetReader)
+        assert [split.name for split in reader.splits] == ["val"]
+
+    def test_kwargs_forwarded_with_format_hint(self, temp_coco_dataset):
+        reader = create_dataset_reader(temp_coco_dataset, format_hint="coco", classes_file=None)
+        assert isinstance(reader, COCODatasetReader)
+        assert reader.index2label == {0: "person", 1: "car"}
+
 
 class TestCOCODatasetValidation:
     """Test COCO dataset validation methods."""
@@ -468,12 +504,12 @@ class TestCOCODatasetValidation:
         reader = COCODatasetReader(temp_coco_dataset)
         result = reader.validate_structure()
 
-        assert result["is_valid"] is True
-        assert len(result["issues"]) == 0
-        assert result["stats"]["num_images"] == 2
-        assert result["stats"]["num_images"] == 2
-        assert result["stats"]["num_annotations"] == 3
-        assert result["stats"]["num_categories"] == 2
+        assert bool(result)
+        assert len(result.issues) == 0
+        assert result.stats["num_images"] == 2
+        assert result.stats["num_images"] == 2
+        assert result.stats["num_annotations"] == 3
+        assert result.stats["num_categories"] == 2
 
     def test_validate_structure_missing_annotation(self, tmp_path):
         """Test COCO validation with missing annotations file."""
@@ -514,11 +550,11 @@ class TestYOLODatasetValidation:
         reader = YOLODatasetReader(temp_yolo_dataset)
         result = reader.validate_structure()
 
-        assert result["is_valid"] is True
-        assert len(result["issues"]) == 0
-        assert result["stats"]["num_images"] == 2
-        assert result["stats"]["num_label_files"] == 2
-        assert result["stats"]["num_classes"] == 3
+        assert bool(result)
+        assert len(result.issues) == 0
+        assert result.stats["num_images"] == 2
+        assert result.stats["num_label_files"] == 2
+        assert result.stats["num_classes"] == 3
 
     def test_validate_structure_missing_labels(self, tmp_path):
         """Test YOLO validation with missing labels directory."""
@@ -561,8 +597,8 @@ class TestYOLODatasetValidation:
         reader = YOLODatasetReader(temp_yolo_dataset)
         result = reader.validate_structure()
 
-        assert result["is_valid"] is False
-        assert any("expected 5 values" in issue for issue in result["issues"])
+        assert not bool(result)
+        assert any("expected 5 values" in issue for issue in result.issues)
 
     def test_validate_yolo_label_format_out_of_range(self, temp_yolo_dataset):
         """Test YOLO label format validation with out-of-range coordinates."""
@@ -573,8 +609,8 @@ class TestYOLODatasetValidation:
         reader = YOLODatasetReader(temp_yolo_dataset)
         result = reader.validate_structure()
 
-        assert result["is_valid"] is False
-        assert any("out of range" in issue for issue in result["issues"])
+        assert not bool(result)
+        assert any("out of range" in issue for issue in result.issues)
 
 
 @pytest.mark.parametrize(
@@ -619,6 +655,6 @@ def test_format_consistency(format_type, expected_reader, tmp_path):
     # Validation should pass
     result = reader.validate_structure()
     # Note: might not be fully valid due to minimal structure, but should not crash
-    assert "is_valid" in result
-    assert "issues" in result
-    assert "stats" in result
+    assert isinstance(bool(result), bool)
+    assert isinstance(result.issues, list)
+    assert isinstance(result.stats, dict)

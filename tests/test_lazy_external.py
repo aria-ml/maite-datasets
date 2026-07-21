@@ -55,16 +55,16 @@ class TestCOCOLazy:
         assert isinstance(img, LazyArray)
 
     def test_lazy_shape_no_decode(self, coco_dataset_dir, monkeypatch):
-        from maite_datasets.object_detection import _coco
+        from maite_datasets import _lazy
 
         decoded = {"n": 0}
-        real_loader = _coco.pil_rgb_chw_load
+        real_loader = _lazy.pil_rgb_chw_load
 
         def spy_loader(path):
             decoded["n"] += 1
             return real_loader(path)
 
-        monkeypatch.setattr(_coco, "pil_rgb_chw_load", spy_loader)
+        monkeypatch.setattr(_lazy, "pil_rgb_chw_load", spy_loader)
         ds = COCODataset(COCODatasetReader(coco_dataset_dir), lazy=True)
         img, target, _ = ds[0]
         assert target.boxes.shape == (1, 4)
@@ -78,6 +78,14 @@ class TestCOCOLazy:
         lazy_ds = COCODataset(COCODatasetReader(coco_dataset_dir), lazy=True)
         lazy_img, _, _ = lazy_ds[0]
         np.testing.assert_array_equal(np.asarray(lazy_img), eager_img)
+
+    def test_lazy_defers_image_transform(self, coco_dataset_dir):
+        """Image-only transforms ride along in LazyArray.pending and run at materialization."""
+        reader = COCODatasetReader(coco_dataset_dir)
+        baseline = np.asarray(reader.create_dataset()[0][0])
+        lazy_img, _, _ = reader.create_dataset(lazy=True, transforms=lambda image: image + 1)[0]
+        assert isinstance(lazy_img, LazyArray)
+        np.testing.assert_array_equal(np.asarray(lazy_img), baseline + 1)
 
 
 class TestYOLOLazy:
@@ -105,6 +113,18 @@ class TestYOLOLazy:
         lazy_ds = YOLODataset(YOLODatasetReader(yolo_dataset_dir), lazy=True)
         lazy_img, _, _ = lazy_ds[0]
         np.testing.assert_array_equal(np.asarray(lazy_img), eager_img)
+
+    def test_lazy_defers_image_transform(self, yolo_dataset_dir):
+        """Image-only transforms ride along in LazyArray.pending and run at materialization.
+
+        Boxes must still be scaled by the on-disk dimensions, without a decode.
+        """
+        reader = YOLODatasetReader(yolo_dataset_dir)
+        baseline_img, baseline_target, _ = reader.create_dataset()[0]
+        lazy_img, lazy_target, _ = reader.create_dataset(lazy=True, transforms=lambda image: image + 1)[0]
+        assert isinstance(lazy_img, LazyArray)
+        np.testing.assert_array_equal(lazy_target.boxes, baseline_target.boxes)
+        np.testing.assert_array_equal(np.asarray(lazy_img), np.asarray(baseline_img) + 1)
 
 
 class TestHFLazy:
