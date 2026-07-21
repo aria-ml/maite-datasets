@@ -2,6 +2,13 @@
 
 ## PENDING
 
+- [feat] Add 6 new datasets
+  - M3FD dataset (google drive download)
+  - Drone Swarm dataset (huggingface)
+  - Drone Vehicle dataset (huggingface)
+  - Military vehicle dataset (huggingface, contains an Ontology)
+  - Military aircraft dataset (huggingface, contains an Ontology)
+  - Sky Sea Land dataset (kaggle)
 - [impr] Address code review fixes for simplification and scope
 - [deps] Add pyyaml dependency and optional hf dependency
 - [impr] Remove OpenCV dependency
