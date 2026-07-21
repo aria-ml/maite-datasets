@@ -1,5 +1,9 @@
 # Changelog for maite-datasets
 
+## PENDING
+
+- [impr] Remove OpenCV dependency
+
 ## v0.0.15
 
 - [fix] Rename MOT datasets to match MAITE nomenclature
