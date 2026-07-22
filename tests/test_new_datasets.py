@@ -71,12 +71,14 @@ def dronevehicle_fake(tmp_path_factory):
     base = temp / "dronevehicle"
     for split, count in (("train", 3), ("val", 2), ("test", 1)):
         img_dir = base / split / f"{split}img"
+        img_ir_dir = base / split / f"{split}imgr"
         ir_dir = base / split / f"{split}labelr"
         rgb_dir = base / split / f"{split}label"
-        for folder in (img_dir, ir_dir, rgb_dir):
+        for folder in (img_dir, img_ir_dir, ir_dir, rgb_dir):
             folder.mkdir(parents=True, exist_ok=True)
         for i in range(count):
             _save_image(img_dir / f"{i:05}.jpg")
+            _save_image(img_ir_dir / f"{i:05}.jpg")
             (ir_dir / f"{i:05}.xml").write_text(DRONEVEHICLE_IR_ANNOTATION)
             (rgb_dir / f"{i:05}.xml").write_text(DRONEVEHICLE_RGB_ANNOTATION)
     yield temp
@@ -162,27 +164,6 @@ class TestM3FD:
         with pytest.raises(ValueError, match="Missing bndbox/xmax"):
             dataset._read_annotations(str(annotation))
 
-    def test_m3fd_hf_load(self, m3fd_fake, monkeypatch, tmp_path):
-        monkeypatch.setattr("maite_datasets.object_detection._m3fd._hf_extract", lambda **kwargs: None)
-        dataset = M3FD(root=m3fd_fake)
-        dataset.path = tmp_path / "hf"
-        for split, count in (("train", 2), ("val", 1)):
-            (dataset.path / split / "images").mkdir(parents=True)
-            (dataset.path / split / "labels").mkdir(parents=True)
-            for i in range(count):
-                _save_image(dataset.path / split / "images" / f"{i:05}.tiff")
-                (dataset.path / split / "labels" / f"{i:05}.txt").write_text("")
-
-        dataset.image_set = "base"
-        filepaths, targets, datum_metadata = dataset._load_hf_data()
-        assert len(filepaths) == 3
-        assert len(targets) == 3
-        assert datum_metadata["image_id"] == ["00000", "00001", "00000"]
-
-        dataset.image_set = "test"
-        with pytest.raises(FileNotFoundError):
-            dataset._load_hf_data()
-
 
 @pytest.mark.optional
 class TestDroneVehicle:
@@ -190,7 +171,7 @@ class TestDroneVehicle:
         dataset = DroneVehicle(root=dronevehicle_fake)
         assert len(dataset) == 3
         img, target, datum_meta = dataset[0]
-        assert img.shape == (3, 10, 10)
+        assert img.shape == (4, 10, 10)
         # "feright car" is corrected to the "freight car" class
         assert np.array_equal(target.labels, [4])
         # Rotated quadrilateral reduced to its axis-aligned extent
@@ -206,16 +187,25 @@ class TestDroneVehicle:
         assert len(dataset) == 6
         assert len(dataset._datum_metadata["image_id"]) == 6
 
-    @pytest.mark.parametrize("image_set", ["train", "base"])
-    def test_dronevehicle_hf_load(self, dronevehicle_fake, monkeypatch, image_set):
-        monkeypatch.setattr("maite_datasets.object_detection._dronevehicle._hf_extract", lambda **kwargs: None)
-        monkeypatch.setattr("maite_datasets.object_detection._dronevehicle._extract_archive", lambda *args: None)
-        dataset = DroneVehicle(root=dronevehicle_fake, image_set=image_set, verbose=True)
-        filepaths, targets, datum_metadata = dataset._load_hf_data()
-        expected = 6 if image_set == "base" else 3
-        assert len(filepaths) == expected
-        assert len(targets) == expected
-        assert len(datum_metadata["image_id"]) == expected
+    def test_dronevehicle_root_containing_img_segment(self, tmp_path):
+        """The IR/RGB siblings are derived per path component, not by string replacement.
+
+        A root whose own path contains ``img``/``labelr`` used to be rewritten too,
+        pointing the paired lookups at directories that do not exist.
+        """
+        root = tmp_path / "img" / "labelr"
+        base = root / "dronevehicle" / "train"
+        for suffix in ("img", "imgr", "label", "labelr"):
+            (base / f"train{suffix}").mkdir(parents=True)
+        _save_image(base / "trainimg" / "00000.jpg")
+        _save_image(base / "trainimgr" / "00000.jpg")
+        (base / "trainlabelr" / "00000.xml").write_text(DRONEVEHICLE_IR_ANNOTATION)
+        (base / "trainlabel" / "00000.xml").write_text(DRONEVEHICLE_RGB_ANNOTATION)
+
+        dataset = DroneVehicle(root=root)
+        img, _, datum_meta = dataset[0]
+        assert img.shape == (4, 10, 10)
+        assert datum_meta["rgb_filename"] == "rgb_00001.jpg"
 
 
 @pytest.mark.optional
@@ -283,7 +273,7 @@ class TestMilitaryAircraftImageClassification:
 class TestMilitaryVehicles:
     @pytest.fixture(autouse=True)
     def _no_download(self, monkeypatch):
-        monkeypatch.setattr("maite_datasets.image_classification._military_vehicles._hf_extract", lambda **kw: None)
+        monkeypatch.setattr("maite_datasets._fileio._hf_extract", lambda **kw: None)
 
     def test_vehicles_train(self, military_vehicles_fake):
         dataset = MilitaryVehicles(root=military_vehicles_fake)
@@ -315,7 +305,7 @@ class TestDroneSwarm:
         assert target.boxes.shape == (1, 4)
 
     def test_droneswarm_download(self, tmp_path, monkeypatch, capsys):
-        def fake_extract(repo_id, repo_type, local_dir, allow_patterns, **kwargs):
+        def fake_extract(part, local_dir, root, download, verbose):
             nested = local_dir / "Drone_Swarm_Dataset"
             (nested / "images").mkdir(parents=True)
             (nested / "labels").mkdir(parents=True)
@@ -323,16 +313,16 @@ class TestDroneSwarm:
             (nested / "labels" / "00000.txt").write_text("0 0.5 0.5 0.4 0.4\n")
             (nested / "classes.txt").write_text("drone\n")
 
-        monkeypatch.setattr("maite_datasets.object_detection._droneswarm._hf_extract", fake_extract)
+        monkeypatch.setattr("maite_datasets.object_detection._droneswarm._download_part", fake_extract)
         dataset = DroneSwarm(root=tmp_path, download=True, verbose=True)
         assert len(dataset) == 1
-        assert "Downloading files from huggingface." in capsys.readouterr().out
+        assert "Downloading files from kaggle." in capsys.readouterr().out
 
     def test_droneswarm_skips_existing_download(self, droneswarm_fake, monkeypatch, capsys):
-        def fail(**kwargs):
+        def fail(*args, **kwargs):
             raise AssertionError("should not re-download")
 
-        monkeypatch.setattr("maite_datasets.object_detection._droneswarm._hf_extract", fail)
+        monkeypatch.setattr("maite_datasets.object_detection._droneswarm._download_part", fail)
         DroneSwarm(root=droneswarm_fake, download=True, verbose=True)
         assert "Data already downloaded, skipping download." in capsys.readouterr().out
 
@@ -349,7 +339,7 @@ class TestSkySeaLand:
         assert target.boxes.shape == (1, 4)
 
     def test_skysealand_download(self, tmp_path, monkeypatch, capsys):
-        def fake_extract(url, filename, md5, checksum, local_dir, root, download, verbose):
+        def fake_extract(part, local_dir, root, download, verbose):
             nested = local_dir / "train"
             (nested / "images").mkdir(parents=True)
             (nested / "labels").mkdir(parents=True)
@@ -365,7 +355,7 @@ class TestSkySeaLand:
             with open(local_dir / "data.yaml", "w") as f:
                 yaml.safe_dump(config, f)
 
-        monkeypatch.setattr("maite_datasets.object_detection._skysealand._ensure_exists", fake_extract)
+        monkeypatch.setattr("maite_datasets.object_detection._skysealand._download_part", fake_extract)
         dataset = SkySeaLand(root=tmp_path, download=True, verbose=True)
         assert len(dataset) == 1
         assert "Downloading files from kaggle." in capsys.readouterr().out
@@ -374,7 +364,7 @@ class TestSkySeaLand:
         def fail(*args):
             raise AssertionError("should not re-download")
 
-        monkeypatch.setattr("maite_datasets.object_detection._skysealand._ensure_exists", fail)
+        monkeypatch.setattr("maite_datasets.object_detection._skysealand._download_part", fail)
         SkySeaLand(root=skysealand_fake, download=True, verbose=True)
         assert "Data already downloaded, skipping download." in capsys.readouterr().out
 

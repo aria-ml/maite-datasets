@@ -9,7 +9,8 @@ import tarfile
 import zipfile
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Literal
+from typing import Literal, NamedTuple, TypeAlias
+from urllib.parse import urlparse
 
 import requests
 
@@ -32,6 +33,43 @@ ARCHIVE_ENDINGS = [".zip", ".tar", ".tgz"]
 COMPRESS_ENDINGS = [".gz", ".bz2"]
 
 
+class URLResource(NamedTuple):
+    """An archive fetched over HTTP and verified against a pinned checksum."""
+
+    url: str
+    filename: str
+    md5: bool
+    checksum: str
+
+
+class HFResource(NamedTuple):
+    """A huggingface repo, fetched through the hub client rather than as an archive.
+
+    Has no checksum: the hub verifies its own transfers, and the repo is a file tree
+    rather than a single archive, so there is nothing to pin.
+    """
+
+    repo_id: str
+    repo_type: Literal["dataset", "model"] = "dataset"
+    allow_patterns: list[str] | str | None = None
+
+
+Resource: TypeAlias = URLResource | HFResource
+
+
+class ResourcePart(NamedTuple):
+    """One component of a dataset, plus the interchangeable places it can be fetched from.
+
+    ``name`` identifies the part independently of whichever mirror served it. Mirrors
+    publish the same content under different archive filenames (``archive.zip`` on
+    Kaggle vs ``M3FD_Detection.zip`` on Drive), so a name derived from a filename would
+    not survive a fallback to the next mirror.
+    """
+
+    name: str
+    mirrors: tuple[Resource, ...]
+
+
 def _print(text: str, verbose: bool) -> None:
     if verbose:
         print(text)
@@ -45,18 +83,43 @@ def _validate_file(fpath: Path | str, file_md5: str, md5: bool = False, chunk_si
     return hasher.hexdigest() == file_md5
 
 
+def _is_kaggle(url: str) -> bool:
+    """Whether `url` points at Kaggle, and so needs the cookie warm-up below.
+
+    Derived from the host rather than carried on :class:`URLResource` so a resource
+    can never claim to be something its URL isn't.
+    """
+    hostname = urlparse(url).hostname or ""
+    return hostname == "kaggle.com" or hostname.endswith(".kaggle.com")
+
+
+def _session_setup(url: str, timeout: int) -> requests.Session:
+    """Build the session used to fetch `url`, warming Kaggle cookies when needed."""
+    session = requests.Session()
+    session.headers.update(
+        {
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",  # noqa: E501
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        }
+    )
+
+    if _is_kaggle(url):
+        # Kaggle's download API rejects a cold session; one GET of the landing page
+        # populates session.cookies (ka_sessionid and friends) via requests' own
+        # Session machinery, and the download then carries them.
+        response = session.get("https://www.kaggle.com", timeout=timeout)
+        response.raise_for_status()
+    else:
+        session.headers["Referer"] = "https://google.com/"
+
+    return session
+
+
 def _download_dataset(url: str, file_path: Path, timeout: int = 60, verbose: bool = False) -> None:
     """Download a single resource from its URL to the `data_folder`."""
     error_msg = "URL fetch failure on {}: {} -- {}"
     try:
-        session = requests.Session()
-        session.headers.update(
-            {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",  # noqa: E501
-                "Referer": "https://google.com/",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            }
-        )
+        session = _session_setup(url, timeout)
         response = session.get(url, stream=True, timeout=timeout)
         response.raise_for_status()
 
@@ -79,6 +142,11 @@ def _download_dataset(url: str, file_path: Path, timeout: int = 60, verbose: boo
                     action.group(1), params=params, headers={"Referer": ""}, stream=True, timeout=timeout
                 )
                 response.raise_for_status()
+            else:
+                # Not the Drive confirm form, so it's an error/login page (Kaggle serves
+                # one when the cookie warm-up fails). Streaming it into a .zip would
+                # surface much later as an opaque checksum mismatch.
+                raise RuntimeError(error_msg.format(url, "HTML response", "expected a file, received a web page"))
     except requests.exceptions.HTTPError as e:
         if e.response is not None:
             raise RuntimeError(f"{error_msg.format(url, e.response.status_code, e.response.reason)}") from e
@@ -144,10 +212,7 @@ def _extract_archive(
 
 
 def _ensure_exists(
-    url: str,
-    filename: str,
-    md5: bool,
-    checksum: str,
+    resource: Resource,
     directory: Path,
     root: Path,
     download: bool = True,
@@ -156,7 +221,22 @@ def _ensure_exists(
     """
     For each resource, download it if it doesn't exist in the dataset_dir.
     If the resource is a zip file, extract it (including recursively extracting nested zips).
+
+    Takes the whole :class:`URLResource` rather than its fields so growing the tuple
+    never silently shifts the positional arguments that follow it.
     """
+    if isinstance(resource, HFResource):
+        if not download:
+            raise FileNotFoundError(
+                "Data could not be loaded with the provided root directory, "
+                f"the huggingface repo {resource.repo_id} has not been downloaded, "
+                "and the download parameter is set to False."
+            )
+        _print(f"Downloading {resource.repo_id} from huggingface", verbose)
+        _hf_extract(resource.repo_id, resource.repo_type, directory, resource.allow_patterns, verbose)
+        return
+
+    url, filename, md5, checksum = resource
     file_path = directory / str(filename)
     alternate_path = root / str(filename)
     _, file_ext = file_path.stem, file_path.suffix
@@ -172,7 +252,10 @@ def _ensure_exists(
         _print(f"Downloading {filename} from {url}", verbose)
         _download_dataset(url, check_path, verbose=verbose)
         if not _validate_file(check_path, checksum, md5):
-            raise Exception("File checksum mismatch. Remove current file and retry download.")
+            # Discard the bad bytes; left in place they take the "already exists" branch
+            # on every later run, which then fails the same way forever.
+            check_path.unlink(missing_ok=True)
+            raise Exception(f"File checksum mismatch on downloaded {filename}. Retry the download.")
 
         # If the file is a zip, tar or tgz extract it into the designated folder.
         if file_ext in ARCHIVE_ENDINGS:
@@ -193,6 +276,44 @@ def _ensure_exists(
         if file_ext in ARCHIVE_ENDINGS:
             _print(f"Extracting {filename}...", verbose)
             _extract_archive(file_ext, check_path, directory, compression, verbose)
+
+
+def _part_filename(part: ResourcePart) -> str:
+    """Archive filename of `part`'s primary mirror, for loaders that re-open the file.
+
+    Only meaningful for archive mirrors; a huggingface repo unpacks to a file tree with
+    no single archive to name.
+    """
+    primary = part.mirrors[0]
+    if isinstance(primary, HFResource):
+        raise TypeError(f"{part.name} is fetched from huggingface and has no archive filename.")
+    return primary.filename
+
+
+def _download_part(
+    part: ResourcePart,
+    directory: Path,
+    root: Path,
+    download: bool = True,
+    verbose: bool = False,
+) -> None:
+    """Fetch `part` from the first of its mirrors that succeeds.
+
+    Mirrors hold identical content, so whichever one lands is equivalent. The fallback
+    earns its keep because these archives are large: hosts throttle them, and a mirror
+    that re-publishes its archive invalidates the checksum pinned against it.
+    """
+    last = len(part.mirrors) - 1
+    for index, mirror in enumerate(part.mirrors):
+        try:
+            _ensure_exists(mirror, directory, root, download, verbose)
+            return
+        except Exception:
+            # Only the last mirror's failure is worth surfacing. With downloads
+            # disabled every mirror fails identically, so there is nothing to retry.
+            if index == last or not download:
+                raise
+            _print(f"Could not retrieve {part.name}, trying the next mirror.", verbose)
 
 
 def _remove_folder_nest(directory: str | Path, overwrite: bool = False, verbose: bool = False) -> None:

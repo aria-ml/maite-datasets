@@ -7,8 +7,8 @@ from typing import Literal
 
 import yaml
 
-from maite_datasets._base import DataLocation, DatasetMetadata, ReaderTransforms, _dataset_dir
-from maite_datasets._fileio import _ensure_exists, _print
+from maite_datasets._base import DatasetMetadata, ReaderTransforms, _dataset_dir
+from maite_datasets._fileio import ResourcePart, URLResource, _download_part, _print
 from maite_datasets.object_detection._yolo import YOLODataset, YOLODatasetReader
 
 
@@ -67,15 +67,18 @@ class SkySeaLand(YOLODataset):
     """
 
     _resources = [
-        DataLocation(
-            url="https://www.kaggle.com/api/v1/datasets/download/mdzahidhasanriad/skysealand?datasetVersionNumber=1",
-            filename="archive.zip",
-            md5=True,
-            checksum="gQNTvmvVECRY0TaE6KZMMQ==",
+        ResourcePart(
+            "skysealand",
+            (
+                URLResource(
+                    url="https://www.kaggle.com/api/v1/datasets/download/mdzahidhasanriad/skysealand?datasetVersionNumber=1",
+                    filename="archive.zip",
+                    md5=False,
+                    checksum="aa391650d46dfacf7eee73036ca2321d5e90cef8a253d43a2936f3d089214e7b",
+                ),
+            ),
         ),
     ]
-
-    _classes: list[str] = ["Airplane", "Boat", "Car", "Ship"]
 
     def __init__(
         self,
@@ -95,7 +98,7 @@ class SkySeaLand(YOLODataset):
 
         # Load the data
         if download:
-            self._resource: DataLocation = self._resources[0]
+            self._resource: ResourcePart = self._resources[0]
             self._load_data()
         reader = YOLODatasetReader(self.path, dataset_id=unique_id, image_extensions=[".jpg"], image_set=self.image_set)
 
@@ -117,7 +120,7 @@ class SkySeaLand(YOLODataset):
 
         _print("Downloading files from kaggle.", self._verbose)
 
-        _ensure_exists(*self._resource, self.path, self._root, self._download, self._verbose)
+        _download_part(self._resource, self.path, self._root, self._download, self._verbose)
 
         with open(self.path / "data.yaml") as f:
             config = yaml.safe_load(f)

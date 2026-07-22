@@ -9,11 +9,11 @@ from typing import Any, Literal
 from maite_datasets._base import (
     BaseDatasetNumpyMixin,
     BaseODDataset,
-    DataLocation,
     NumpyArray,
     NumpyObjectDetectionTarget,
     NumpyObjectDetectionTransform,
 )
+from maite_datasets._fileio import ResourcePart, URLResource
 
 
 class MilitaryAircraft(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str], BaseDatasetNumpyMixin):
@@ -73,16 +73,24 @@ class MilitaryAircraft(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, lis
     Data License: `Apache 2.0 <https://choosealicense.com/licenses/apache-2.0/>`_
     """
 
-    _repo_id: str = "Ahnuf/Military_Aircraft_Detection_Classification_Image_Dataset"
-    _repo_type: Literal["dataset", "model"] = "dataset"
-    _limit: list[str] | str | None
-
+    # One archive, two mirrors: Kaggle first, the huggingface copy as fallback.
     _resources = [
-        DataLocation(
-            url="https://huggingface.co/datasets/Ahnuf/Military_Aircraft_Detection_Classification_Image_Dataset/resolve/main/dataset.zip?download=true",
-            filename="dataset.zip",
-            md5=False,
-            checksum="abce22bab42d8b0c544961a25469f4e0fc10cd08fd4fd0dc0aae1ff1673e8514",
+        ResourcePart(
+            "aeroscan",
+            (
+                URLResource(
+                    url="https://www.kaggle.com/api/v1/datasets/download/ahnuf05/aeroscan-military-aircraft-classification?datasetVersionNumber=1",
+                    filename="archive.zip",
+                    md5=False,
+                    checksum="6f3b0bb890cda7004b04eb430d3ae2c571b9a407b9ac5e3c47b2921c3545686f",
+                ),
+                URLResource(
+                    url="https://huggingface.co/datasets/Ahnuf/Military_Aircraft_Detection_Classification_Image_Dataset/resolve/main/dataset.zip?download=true",
+                    filename="dataset.zip",
+                    md5=False,
+                    checksum="abce22bab42d8b0c544961a25469f4e0fc10cd08fd4fd0dc0aae1ff1673e8514",
+                ),
+            ),
         ),
     ]
 
@@ -248,7 +256,6 @@ class MilitaryAircraft(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, lis
             download,
             verbose,
             lazy,
-            hf=False,
         )
         # Annotations are normalized YOLO coordinates; scale them to pixels on access.
         self._bboxes_per_size = True
@@ -258,10 +265,13 @@ class MilitaryAircraft(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, lis
         folders = ["train", "val", "test"] if self.image_set == "base" else [self.image_set]
         data_folder: list[Path] = []
         for folder in folders:
-            data_folder.extend(sorted((self.path / folder).glob("*.jpg")))
+            data_folder.extend(list((self.path / folder).glob("*.jpg")))
+            data_folder.extend(list((self.path / folder).glob("*.jpeg")))
+            data_folder.extend(list((self.path / folder).glob("*.png")))
         if not data_folder:
             raise FileNotFoundError
 
+        data_folder = sorted(data_folder)
         data = [str(entry) for entry in data_folder]
         labels = [str(entry.with_suffix(".txt")) for entry in data_folder]
 

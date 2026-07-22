@@ -12,11 +12,11 @@ from numpy.typing import NDArray
 from maite_datasets._base import (
     BaseDatasetNumpyMixin,
     BaseICDataset,
-    DataLocation,
     DatumMetadata,
     NumpyArray,
     NumpyImageClassificationTransform,
 )
+from maite_datasets._fileio import ResourcePart, URLResource
 
 # Source images are all 640 x 640, so normalized YOLO coordinates scale by this constant.
 _IMAGE_SIZE = 640
@@ -89,16 +89,24 @@ class MilitaryAircraft(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
     Data License: `Apache 2.0 <https://choosealicense.com/licenses/apache-2.0/>`_
     """
 
-    _repo_id: str = "Ahnuf/Military_Aircraft_Detection_Classification_Image_Dataset"
-    _repo_type: Literal["dataset", "model"] = "dataset"
-    _limit: list[str] | str | None
-
+    # One archive, two mirrors: Kaggle first, the huggingface copy as fallback.
     _resources = [
-        DataLocation(
-            url="https://huggingface.co/datasets/Ahnuf/Military_Aircraft_Detection_Classification_Image_Dataset/resolve/main/dataset.zip?download=true",
-            filename="dataset.zip",
-            md5=False,
-            checksum="abce22bab42d8b0c544961a25469f4e0fc10cd08fd4fd0dc0aae1ff1673e8514",
+        ResourcePart(
+            "aeroscan",
+            (
+                URLResource(
+                    url="https://www.kaggle.com/api/v1/datasets/download/ahnuf05/aeroscan-military-aircraft-classification?datasetVersionNumber=1",
+                    filename="archive.zip",
+                    md5=False,
+                    checksum="6f3b0bb890cda7004b04eb430d3ae2c571b9a407b9ac5e3c47b2921c3545686f",
+                ),
+                URLResource(
+                    url="https://huggingface.co/datasets/Ahnuf/Military_Aircraft_Detection_Classification_Image_Dataset/resolve/main/dataset.zip?download=true",
+                    filename="dataset.zip",
+                    md5=False,
+                    checksum="abce22bab42d8b0c544961a25469f4e0fc10cd08fd4fd0dc0aae1ff1673e8514",
+                ),
+            ),
         ),
     ]
 
@@ -265,7 +273,6 @@ class MilitaryAircraft(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
             download,
             verbose,
             lazy,
-            hf=False,
         )
 
     def _load_data_inner(self) -> tuple[list[str], list[int], dict[str, Any]]:
@@ -286,7 +293,12 @@ class MilitaryAircraft(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
         labels: list[int] = []
         self._crop: list[tuple[int, ...]] = []
         for file in data_folder:
-            image_path = str(file.with_suffix(".jpg"))
+            correct_file = file.with_suffix(".jpg")
+            if not correct_file.exists():
+                correct_file = file.with_suffix(".jpeg")
+            if not correct_file.exists():
+                correct_file = file.with_suffix(".png")
+            image_path = str(correct_file)
             found = False
             with open(file) as f:
                 for line in f:

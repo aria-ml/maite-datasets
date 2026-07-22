@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from maite_datasets._base import DataLocation
+from maite_datasets._fileio import ResourcePart, URLResource
 from maite_datasets._lazy import LazyArray
 from maite_datasets.image_classification._mnist import MNIST
 from maite_datasets.image_classification._ships import Ships
@@ -151,11 +151,16 @@ class TestLazyODDataset:
             MNIST,
             "_resources",
             [
-                DataLocation(
-                    url="https://storage.googleapis.com/tensorflow/tf-keras-datasets/mnist.npz",
-                    filename="mnist.npz",
-                    md5=False,
-                    checksum=get_hash(mnist_npy / "mnist.npz"),
+                ResourcePart(
+                    "mnist",
+                    (
+                        URLResource(
+                            url="https://storage.googleapis.com/tensorflow/tf-keras-datasets/mnist.npz",
+                            filename="mnist.npz",
+                            md5=False,
+                            checksum=get_hash(mnist_npy / "mnist.npz"),
+                        ),
+                    ),
                 ),
             ],
         )

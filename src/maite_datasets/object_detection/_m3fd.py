@@ -12,15 +12,13 @@ from defusedxml.ElementTree import parse
 from maite_datasets._base import (
     BaseDatasetNumpyMixin,
     BaseODDataset,
-    DataLocation,
     DatumMetadata,
     NumpyArray,
     NumpyObjectDetectionTarget,
     NumpyObjectDetectionTransform,
     ObjectDetectionTargetTuple,
-    _merge_datum_metadata,
 )
-from maite_datasets._fileio import _hf_extract
+from maite_datasets._fileio import ResourcePart, URLResource
 
 
 def _bbox_coord(obj: Any, name: str, annotation: str) -> int:
@@ -39,7 +37,8 @@ class M3FD(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str]
     `Target-aware Dual Adversarial Learning and a Multi-scenario Multi-Modality Benchmark to Fuse Infrared and
     Visible for Object Detection <https://ieeexplore.ieee.org/document/9879642>`_ by Jinyuan Liu et. al. (2022).
 
-    The dataset is approximately 5.8 GB and can be found `here <https://github.com/dlut-dimt/TarDAL>`_
+    The dataset is approximately 5.8 GB and can be found `here <https://github.com/dlut-dimt/TarDAL>`_,
+    on `kaggle <https://www.kaggle.com/datasets/nus1998/m3fd-dataset>`_
     or on `huggingface <https://huggingface.co/datasets/Frencis/M3FD_RGBT>`_.
     Images are collected with varying backgrounds, time of day and weather.
     Ground truth labels are provided for the train, validation and test set.
@@ -58,8 +57,8 @@ class M3FD(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str]
     image_set: "train", "val", "operational" or "base", default "train"
         If "base", then the full dataset is selected (train and val).
         "operational" selects the separate M3FD_Fusion set instead of the detection set.
-        Splitting only applies when downloading from huggingface; the direct-download
-        archive is not split, so "train", "val" and "base" all yield the full set.
+        The published archive is not split, so "train", "val" and "base" all yield the
+        full set.
     transforms : Transform, Sequence[Transform] or None, default None
         Transform(s) to apply to the data.
     download : bool, default False
@@ -94,31 +93,40 @@ class M3FD(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str]
     Data License: `GPL 3.0 <https://choosealicense.com/licenses/gpl-3.0/>`_
     """
 
-    # Downloading from huggingface takes hours - avoid if possible
-    _repo_id: str = "Frencis/M3FD_RGBT"
-    _repo_type: Literal["dataset", "model"] = "dataset"
-    _limit: list[str] | str | None
+    _DETECTION, _FUSION = 0, 1
 
-    # Actual google drive location for files but google limits downloads due to file sizes - back up only
     _resources = [
-        DataLocation(
-            url="https://drive.google.com/uc?export=download&id=1C8kkYkj1Xls6UtvJ4h6UajiPcvaQ7eeI",
-            filename="M3FD_Detection.zip",
-            md5=False,
-            checksum="62780f67569cd35e631aba449a45781e4eff4f3e2a4bb962dd02551f110a3407",
+        # The detection set, mirrored. Both archives unpack to the same
+        # Vis/ + Ir/ + Annotation/ layout; Kaggle leads because Google Drive throttles
+        # downloads of an archive this large and serves a quota page instead of the file.
+        ResourcePart(
+            "detection",
+            (
+                URLResource(
+                    url="https://www.kaggle.com/api/v1/datasets/download/nus1998/m3fd-dataset?datasetVersionNumber=1",
+                    filename="archive.zip",
+                    md5=False,
+                    checksum="5ad2ef3169e4d155be4f9adb193181bacb3cdda1adfe4b1462a8e4cf23beb93e",
+                ),
+                URLResource(
+                    url="https://drive.google.com/uc?export=download&id=1C8kkYkj1Xls6UtvJ4h6UajiPcvaQ7eeI",
+                    filename="M3FD_Detection.zip",
+                    md5=False,
+                    checksum="62780f67569cd35e631aba449a45781e4eff4f3e2a4bb962dd02551f110a3407",
+                ),
+            ),
         ),
-        DataLocation(
-            url="https://drive.google.com/uc?export=download&id=1pjdhjVTpOsj2qMBVIRpLOLA7UWIuHt0P",
-            filename="M3FD_Fusion.zip",
-            md5=False,
-            checksum="ec33d031bbd26697b75061972786526cdd815ee8111586813427d155ec522dfc",
-        ),
-        # alternative download location
-        DataLocation(
-            url="https://www.kaggle.com/api/v1/datasets/download/nus1998/m3fd-dataset?datasetVersionNumber=1",
-            filename="archive.zip",
-            md5=True,
-            checksum="6VVWpm+e2Zb12isdBahe1w==",
+        # The fusion set backing image_set="operational", published only on Google Drive.
+        ResourcePart(
+            "fusion",
+            (
+                URLResource(
+                    url="https://drive.google.com/uc?export=download&id=1pjdhjVTpOsj2qMBVIRpLOLA7UWIuHt0P",
+                    filename="M3FD_Fusion.zip",
+                    md5=False,
+                    checksum="ec33d031bbd26697b75061972786526cdd815ee8111586813427d155ec522dfc",
+                ),
+            ),
         ),
     ]
 
@@ -147,47 +155,23 @@ class M3FD(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str]
             download,
             verbose,
             lazy,
-            hf=False,
         )
-
-    def _load_hf_data(self) -> tuple[list[str], list[str], dict[str, list[Any]]]:
-        filepaths: list[str] = []
-        targets: list[str] = []
-        datum_metadata: dict[str, list[Any]] = {}
-
-        splits = ["train", "val"] if self.image_set == "base" else [self.image_set]
-        self._limit = [f"{split}/*" for split in splits]
-
-        _hf_extract(repo_id=self._repo_id, repo_type=self._repo_type, local_dir=self.path, allow_patterns=self._limit)
-
-        for split in splits:
-            base_dir = self.path / split
-            data_folder = sorted((base_dir / "images").glob("*.tiff"))
-            if not data_folder:
-                raise FileNotFoundError
-
-            filepaths.extend(str(entry) for entry in data_folder)
-            targets.extend(sorted(str(entry) for entry in (base_dir / "labels").glob("*.txt")))
-            _merge_datum_metadata(datum_metadata, {"image_id": [entry.stem for entry in data_folder]})
-
-        return filepaths, targets, datum_metadata
 
     def _load_data(self) -> tuple[list[str], list[str], dict[str, list[Any]]]:
         filepaths: list[str] = []
         targets: list[str] = []
         datum_metadata: dict[str, list[Any]] = {}
 
-        # If base, load all resources
         if self.image_set == "operational":
             self.path: Path = self.path / "extra"
             self.path.mkdir(parents=True, exist_ok=True)
-            self._resource = self._resources[1]
+            self._resource = self._resources[self._FUSION]
             resource_filepaths, resource_targets, _ = super()._load_data()
             filepaths.extend(resource_filepaths)
             targets.extend(resource_targets)
 
         else:
-            self._resource = self._resources[0]
+            self._resource = self._resources[self._DETECTION]
             resource_filepaths, resource_targets, resource_metadata = super()._load_data()
             filepaths.extend(resource_filepaths)
             targets.extend(resource_targets)
@@ -207,6 +191,16 @@ class M3FD(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str]
         annotations = sorted(str(entry) for entry in label_dir.glob("*.xml")) if label_dir.is_dir() else []
 
         return data, annotations, file_data
+
+    @staticmethod
+    def _infrared_path(rgb_path: str) -> str:
+        """Paired IR image for `rgb_path`: ``Vis/x.png`` -> ``Ir/x.png``.
+
+        Swaps only the containing directory, so a root directory that itself has a
+        ``Vis`` segment is left alone.
+        """
+        path = Path(rgb_path)
+        return str(path.parent.with_name("Ir") / path.name)
 
     def _read_annotations(self, annotation: str) -> tuple[list[list[float]], list[int], dict[str, Any]]:
         """Function for extracting the info for the label and boxes"""
@@ -251,7 +245,7 @@ class M3FD(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str]
         # Stack the paired IR channel onto the RGB image. Both are read eagerly:
         # np.concatenate materializes its inputs, so lazy mode cannot defer here.
         rgb_img = np.asarray(self._get_image(self._filepaths[index]))
-        ir_img = np.asarray(self._get_image(self._filepaths[index].replace("Vis", "Ir")))
+        ir_img = np.asarray(self._get_image(self._infrared_path(self._filepaths[index])))
         img = np.concatenate([rgb_img, ir_img[:1]])
         # Create the Object Detection Target
         # Cast target explicitly to ODTarget as namedtuple does not provide any typing metadata

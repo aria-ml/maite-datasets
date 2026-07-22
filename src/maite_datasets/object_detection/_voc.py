@@ -14,12 +14,11 @@ from maite_datasets._base import (
     BaseDatasetNumpyMixin,
     BaseDownloadedDataset,
     BaseODDataset,
-    DataLocation,
     NumpyArray,
     NumpyObjectDetectionTarget,
     NumpyObjectDetectionTransform,
-    _ensure_exists,
 )
+from maite_datasets._fileio import ResourcePart, URLResource
 
 VOCClassStringMap = Literal[
     "aeroplane",
@@ -48,53 +47,93 @@ TVOCClassMap = TypeVar("TVOCClassMap", VOCClassStringMap, int, list[VOCClassStri
 
 class BaseVOCDataset(BaseDownloadedDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str]):
     _resources = [
-        DataLocation(
-            url="https://data.brainchip.com/dataset-mirror/voc/VOCtrainval_11-May-2012.tar",
-            filename="VOCtrainval_11-May-2012.tar",
-            md5=False,
-            checksum="e14f763270cf193d0b5f74b169f44157a4b0c6efa708f4dd0ff78ee691763bcb",
+        ResourcePart(
+            "VOCtrainval_11-May-2012",
+            (
+                URLResource(
+                    url="https://data.brainchip.com/dataset-mirror/voc/VOCtrainval_11-May-2012.tar",
+                    filename="VOCtrainval_11-May-2012.tar",
+                    md5=False,
+                    checksum="e14f763270cf193d0b5f74b169f44157a4b0c6efa708f4dd0ff78ee691763bcb",
+                ),
+            ),
         ),
-        DataLocation(
-            url="http://host.robots.ox.ac.uk/pascal/VOC/voc2011/VOCtrainval_25-May-2011.tar",
-            filename="VOCtrainval_25-May-2011.tar",
-            md5=False,
-            checksum="0a7f5f5d154f7290ec65ec3f78b72ef72c6d93ff6d79acd40dc222a9ee5248ba",
+        ResourcePart(
+            "VOCtrainval_25-May-2011",
+            (
+                URLResource(
+                    url="http://host.robots.ox.ac.uk/pascal/VOC/voc2011/VOCtrainval_25-May-2011.tar",
+                    filename="VOCtrainval_25-May-2011.tar",
+                    md5=False,
+                    checksum="0a7f5f5d154f7290ec65ec3f78b72ef72c6d93ff6d79acd40dc222a9ee5248ba",
+                ),
+            ),
         ),
-        DataLocation(
-            url="http://host.robots.ox.ac.uk/pascal/VOC/voc2010/VOCtrainval_03-May-2010.tar",
-            filename="VOCtrainval_03-May-2010.tar",
-            md5=False,
-            checksum="1af4189cbe44323ab212bff7afbc7d0f55a267cc191eb3aac911037887e5c7d4",
+        ResourcePart(
+            "VOCtrainval_03-May-2010",
+            (
+                URLResource(
+                    url="http://host.robots.ox.ac.uk/pascal/VOC/voc2010/VOCtrainval_03-May-2010.tar",
+                    filename="VOCtrainval_03-May-2010.tar",
+                    md5=False,
+                    checksum="1af4189cbe44323ab212bff7afbc7d0f55a267cc191eb3aac911037887e5c7d4",
+                ),
+            ),
         ),
-        DataLocation(
-            url="http://host.robots.ox.ac.uk/pascal/VOC/voc2009/VOCtrainval_11-May-2009.tar",
-            filename="VOCtrainval_11-May-2009.tar",
-            md5=False,
-            checksum="11cbe1741fb5bdadbbca3c08e9ec62cd95c14884845527d50847bc2cf57e7fd6",
+        ResourcePart(
+            "VOCtrainval_11-May-2009",
+            (
+                URLResource(
+                    url="http://host.robots.ox.ac.uk/pascal/VOC/voc2009/VOCtrainval_11-May-2009.tar",
+                    filename="VOCtrainval_11-May-2009.tar",
+                    md5=False,
+                    checksum="11cbe1741fb5bdadbbca3c08e9ec62cd95c14884845527d50847bc2cf57e7fd6",
+                ),
+            ),
         ),
-        DataLocation(
-            url="http://host.robots.ox.ac.uk/pascal/VOC/voc2008/VOCtrainval_14-Jul-2008.tar",
-            filename="VOCtrainval_14-Jul-2008.tar",
-            md5=False,
-            checksum="7f0ca53c1b5a838fbe946965fc106c6e86832183240af5c88e3f6c306318d42e",
+        ResourcePart(
+            "VOCtrainval_14-Jul-2008",
+            (
+                URLResource(
+                    url="http://host.robots.ox.ac.uk/pascal/VOC/voc2008/VOCtrainval_14-Jul-2008.tar",
+                    filename="VOCtrainval_14-Jul-2008.tar",
+                    md5=False,
+                    checksum="7f0ca53c1b5a838fbe946965fc106c6e86832183240af5c88e3f6c306318d42e",
+                ),
+            ),
         ),
-        DataLocation(
-            url="https://data.brainchip.com/dataset-mirror/voc/VOCtrainval_06-Nov-2007.tar",
-            filename="VOCtrainval_06-Nov-2007.tar",
-            md5=False,
-            checksum="7d8cd951101b0957ddfd7a530bdc8a94f06121cfc1e511bb5937e973020c7508",
+        ResourcePart(
+            "VOCtrainval_06-Nov-2007",
+            (
+                URLResource(
+                    url="https://data.brainchip.com/dataset-mirror/voc/VOCtrainval_06-Nov-2007.tar",
+                    filename="VOCtrainval_06-Nov-2007.tar",
+                    md5=False,
+                    checksum="7d8cd951101b0957ddfd7a530bdc8a94f06121cfc1e511bb5937e973020c7508",
+                ),
+            ),
         ),
-        DataLocation(
-            url="https://data.brainchip.com/dataset-mirror/voc/VOC2012test.tar",
-            filename="VOC2012test.tar",
-            md5=False,
-            checksum="f08582b1935816c5eab3bbb1eb6d06201a789eaa173cdf1cf400c26f0cac2fb3",
+        ResourcePart(
+            "VOC2012test",
+            (
+                URLResource(
+                    url="https://data.brainchip.com/dataset-mirror/voc/VOC2012test.tar",
+                    filename="VOC2012test.tar",
+                    md5=False,
+                    checksum="f08582b1935816c5eab3bbb1eb6d06201a789eaa173cdf1cf400c26f0cac2fb3",
+                ),
+            ),
         ),
-        DataLocation(
-            url="https://data.brainchip.com/dataset-mirror/voc/VOCtest_06-Nov-2007.tar",
-            filename="VOCtest_06-Nov-2007.tar",
-            md5=False,
-            checksum="6836888e2e01dca84577a849d339fa4f73e1e4f135d312430c4856b5609b4892",
+        ResourcePart(
+            "VOCtest_06-Nov-2007",
+            (
+                URLResource(
+                    url="https://data.brainchip.com/dataset-mirror/voc/VOCtest_06-Nov-2007.tar",
+                    filename="VOCtest_06-Nov-2007.tar",
+                    md5=False,
+                    checksum="6836888e2e01dca84577a849d339fa4f73e1e4f135d312430c4856b5609b4892",
+                ),
+            ),
         ),
     ]
     _base2007: tuple[int, int] = (5, 7)
@@ -221,41 +260,17 @@ class BaseVOCDataset(BaseDownloadedDataset[NumpyArray, NumpyObjectDetectionTarge
 
         if self.image_set == "base":
             if not train_exists and not test_exists:
-                _ensure_exists(
-                    *self._resources[resource_idx[0]],
-                    self.path,
-                    self._root,
-                    self._download,
-                    self._verbose,
-                )
+                self._download_part(self._resources[resource_idx[0]])
                 self._update_path()
-                _ensure_exists(
-                    *self._resources[resource_idx[1]],
-                    tmp_path,
-                    self._root,
-                    self._download,
-                    self._verbose,
-                )
+                self._download_part(self._resources[resource_idx[1]], tmp_path)
                 self._merge_voc_directories(tmp_path)
 
             elif train_exists and not test_exists:
-                _ensure_exists(
-                    *self._resources[resource_idx[1]],
-                    tmp_path,
-                    self._root,
-                    self._download,
-                    self._verbose,
-                )
+                self._download_part(self._resources[resource_idx[1]], tmp_path)
                 self._merge_voc_directories(tmp_path)
 
             elif not train_exists and test_exists:
-                _ensure_exists(
-                    *self._resources[resource_idx[0]],
-                    tmp_path,
-                    self._root,
-                    self._download,
-                    self._verbose,
-                )
+                self._download_part(self._resources[resource_idx[0]], tmp_path)
                 self._merge_voc_directories(tmp_path)
 
             # Code to determine what is needed in each category
@@ -280,7 +295,7 @@ class BaseVOCDataset(BaseDownloadedDataset[NumpyArray, NumpyObjectDetectionTarge
             self._resource = self._resources[resource_idx[1]]
 
             if train_exists and not test_exists:
-                _ensure_exists(*self._resource, tmp_path, self._root, self._download, self._verbose)
+                self._download_part(self._resource, tmp_path)
                 self._merge_voc_directories(tmp_path)
 
             resource_filepaths, resource_targets, resource_metadata = self._load_try_and_update()
@@ -322,14 +337,14 @@ class BaseVOCDataset(BaseDownloadedDataset[NumpyArray, NumpyObjectDetectionTarge
     def _load_try_and_update(self) -> tuple[list[str], list[str], dict[str, Any]]:
         """Test if data needs to be downloaded and update path if it does"""
         if self._verbose:
-            print(f"Determining if {self._resource.filename} needs to be downloaded.")
+            print(f"Determining if {self._resource.name} needs to be downloaded.")
 
         try:
             result = self._load_data_inner()
             if self._verbose:
                 print("No download needed, loaded data successfully.")
         except FileNotFoundError:
-            _ensure_exists(*self._resource, self.path, self._root, self._download, self._verbose)
+            self._download_part(self._resource)
             self._update_path()
             result = self._load_data_inner()
         return result

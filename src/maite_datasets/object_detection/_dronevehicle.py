@@ -4,20 +4,22 @@ __all__ = []
 
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
+import numpy as np
 from defusedxml.ElementTree import parse
 
 from maite_datasets._base import (
     BaseDatasetNumpyMixin,
     BaseODDataset,
-    DataLocation,
+    DatumMetadata,
     NumpyArray,
     NumpyObjectDetectionTarget,
     NumpyObjectDetectionTransform,
+    ObjectDetectionTargetTuple,
     _merge_datum_metadata,
 )
-from maite_datasets._fileio import _extract_archive, _hf_extract, _print
+from maite_datasets._fileio import ResourcePart, URLResource, _remove_folder_nest
 
 
 class DroneVehicle(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str], BaseDatasetNumpyMixin):
@@ -29,7 +31,7 @@ class DroneVehicle(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[st
     Learning <https://ieeexplore.ieee.org/abstract/document/9759286>`_ by Yiming Sun et. al. (2022).
 
     The dataset is approximately 14 GB and can be found `here <https://github.com/VisDrone/DroneVehicle>`_
-    or on `huggingface <https://huggingface.co/datasets/McCheng/DroneVehicle>`_.
+    or on `kaggle <https://www.kaggle.com/datasets/brendanalvey/visdrone-dronevehicle>`_.
     Images are collected with varying backgrounds, time of day and lighting conditions.
     Ground truth labels are provided for the train, validation and test set.
 
@@ -82,29 +84,17 @@ class DroneVehicle(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[st
     Data License: None provided
     """
 
-    _repo_id: str = "McCheng/DroneVehicle"
-    _repo_type: Literal["dataset", "model"] = "dataset"
-    _limit: list[str] | str | None
-
-    # Pulling directly from huggingface
     _resources = [
-        DataLocation(
-            url="https://huggingface.co/datasets/McCheng/DroneVehicle/resolve/main/train.zip?download=true",
-            filename="train.zip",
-            md5=False,
-            checksum="d22eccae518728352b40bb758b383e64db2b1b38e3d8c5d14406724dc869614f",
-        ),
-        DataLocation(
-            url="https://huggingface.co/datasets/McCheng/DroneVehicle/resolve/main/val.zip?download=true",
-            filename="val.zip",
-            md5=False,
-            checksum="043b7944ebb8ce076c1e5cfd37c33de6a59a9f62cf47c0f028387f703d4f5250",
-        ),
-        DataLocation(
-            url="https://huggingface.co/datasets/McCheng/DroneVehicle/resolve/main/test.zip?download=true",
-            filename="test.zip",
-            md5=False,
-            checksum="94bf47e493e7a57fd5d900439f614f339e7b6c7181e4d781bcfebaeb963ffd8e",
+        ResourcePart(
+            "dronevehicle",
+            (
+                URLResource(
+                    url="https://www.kaggle.com/api/v1/datasets/download/brendanalvey/visdrone-dronevehicle?datasetVersionNumber=2",
+                    filename="archive.zip",
+                    md5=False,
+                    checksum="35271ccb2adfd7e34719ad59616fcecb398a798c0bcbc5cded6e30aa62835b78",
+                ),
+            ),
         ),
     ]
 
@@ -132,69 +122,47 @@ class DroneVehicle(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[st
             download,
             verbose,
             lazy,
-            hf=False,  # Can switch to True, if desired
         )
 
-    def _load_hf_data(self) -> tuple[list[str], list[str], dict[str, list[Any]]]:
+    def _load_data_inner(self) -> tuple[list[str], list[str], dict[str, Any]]:
         filepaths: list[str] = []
         targets: list[str] = []
         datum_metadata: dict[str, list[Any]] = {}
 
-        self._limit = f"{self.image_set}.zip" if self.image_set != "base" else None
+        # The Kaggle archive lands nested under VisDrone-DroneVehicle/; flattening is a
+        # no-op once done (and for the huggingface layout, which is already flat), so it
+        # runs unconditionally rather than sniffing which resource we came from.
+        self._remove_nested_folder()
 
-        _hf_extract(repo_id=self._repo_id, repo_type=self._repo_type, local_dir=self.path, allow_patterns=self._limit)
+        for resource in ["train", "val", "test"]:
+            if self.image_set != "base" and resource != self.image_set:
+                continue
+            base_dir = self.path / resource
+            data_folder = sorted((base_dir / f"{resource}img").glob("*.jpg"))
+            if not data_folder:
+                raise FileNotFoundError
 
-        # If base, load all resources
-        if self.image_set == "base":
-            _print("Extracting train.zip, val.zip, and test.zip ...", self._verbose)
-            for file in ["train.zip", "val.zip", "test.zip"]:
-                filepath = self.path / file
-                filename = filepath.stem
-                file_ext = filepath.suffix
-                _extract_archive(file_ext, filepath, self.path, False, self._verbose)
-
-                data, annotations, file_data = self._load_data_inner(filename)
-                filepaths.extend(data)
-                targets.extend(annotations)
-                _merge_datum_metadata(datum_metadata, file_data)
-
-        else:
-            data, annotations, file_data = self._load_data_inner(self.image_set)
-            filepaths.extend(data)
-            targets.extend(annotations)
+            filepaths.extend([str(entry) for entry in data_folder])
+            targets.extend(sorted(str(entry) for entry in (base_dir / f"{resource}labelr").glob("*.xml")))
+            file_data = {"image_id": [f"{resource}_{entry.name}" for entry in data_folder]}
             _merge_datum_metadata(datum_metadata, file_data)
 
         return filepaths, targets, datum_metadata
 
-    def _load_data(self) -> tuple[list[str], list[str], dict[str, list[Any]]]:
-        filepaths: list[str] = []
-        targets: list[str] = []
-        datum_metadata: dict[str, list[Any]] = {}
+    def _remove_nested_folder(self) -> None:
+        nested = self.path / "VisDrone-DroneVehicle"
+        if nested.is_dir():
+            _remove_folder_nest(nested, verbose=self._verbose)
 
-        # If base, load all resources; otherwise grab only the desired data
-        for resource in self._resources:
-            if self.image_set != "base" and self.image_set not in resource.filename:
-                continue
-            self._resource = resource
-            resource_filepaths, resource_targets, resource_metadata = super()._load_data()
-            filepaths.extend(resource_filepaths)
-            targets.extend(resource_targets)
-            _merge_datum_metadata(datum_metadata, resource_metadata)
+    @staticmethod
+    def _infrared_path(rgb_path: str) -> str:
+        """Paired IR image for `rgb_path`: ``<split>img/x.jpg`` -> ``<split>imgr/x.jpg``.
 
-        return filepaths, targets, datum_metadata
-
-    def _load_data_inner(self, resrc_name: str | None = None) -> tuple[list[str], list[str], dict[str, Any]]:
-        resource_name = resrc_name if resrc_name is not None else self._resource.filename[:-4]
-        base_dir = self.path / resource_name
-        data_folder = sorted((base_dir / f"{resource_name}img").glob("*.jpg"))
-        if not data_folder:
-            raise FileNotFoundError
-
-        file_data = {"image_id": [f"{resource_name}_{entry.name}" for entry in data_folder]}
-        data = [str(entry) for entry in data_folder]
-        annotations = sorted(str(entry) for entry in (base_dir / f"{resource_name}labelr").glob("*.xml"))
-
-        return data, annotations, file_data
+        Rebuilt from the path components rather than by string replacement, so a root
+        directory that itself contains a segment ending in ``img`` is left alone.
+        """
+        path = Path(rgb_path)
+        return str(path.parent.with_name(f"{path.parent.name}r") / path.name)
 
     def _read_annotations(self, annotation: str) -> tuple[list[list[float]], list[int], dict[str, Any]]:
         """Function for extracting the info for the label and boxes"""
@@ -219,9 +187,44 @@ class DroneVehicle(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[st
 
         labels = [self._label2index[lbl] for lbl in text_labels]
 
-        rgb_annotation = annotation.replace("labelr/", "label/")
-        root = parse(rgb_annotation).getroot()
+        # Paired RGB annotation: <split>labelr/x.xml -> <split>label/x.xml, built from
+        # path components so a root directory ending in "labelr" is left alone.
+        ir_annotation = Path(annotation)
+        rgb_annotation = ir_annotation.parent.with_name(ir_annotation.parent.name.removesuffix("r"))
+        root = parse(str(rgb_annotation / ir_annotation.name)).getroot()
         if root is not None:
             additional_meta["rgb_filename"] = root.findtext("filename", default="")
             additional_meta["image_depth"] += int(root.findtext("size/depth", default="0"))
         return boxes, labels, additional_meta
+
+    def __getitem__(self, index: int) -> tuple[NumpyArray, NumpyObjectDetectionTarget, DatumMetadata]:
+        """
+        Args
+        ----
+        index : int
+            Value of the desired data point
+
+        Returns
+        -------
+        tuple[TArray, ObjectDetectionTarget, DatumMetadata]
+            Image, target, datum_metadata - target.boxes returns boxes in x0, y0, x1, y1 format
+        """
+        # Grab the bounding boxes and labels from the annotations
+        annotation = self._targets[index]
+        boxes, labels, additional_metadata = self._read_annotations(annotation)
+        # Stack the paired IR channel onto the RGB image. Both are read eagerly:
+        # np.concatenate materializes its inputs, so lazy mode cannot defer here.
+        rgb_img = np.asarray(self._get_image(self._filepaths[index]))
+        ir_img = np.asarray(self._get_image(self._infrared_path(self._filepaths[index])))
+        img = np.concatenate([rgb_img, ir_img[:1]])
+        # Create the Object Detection Target
+        # Cast target explicitly to ODTarget as namedtuple does not provide any typing metadata
+        target = cast(
+            NumpyObjectDetectionTarget,
+            ObjectDetectionTargetTuple(self._as_array(boxes), self._as_array(labels), self._one_hot_encode(labels)),
+        )
+
+        img_metadata = {key: val[index] for key, val in self._datum_metadata.items()}
+        img_metadata = img_metadata | additional_metadata
+
+        return self._transform((cast(NumpyArray, img), target, self._to_datum_metadata(index, img_metadata)))

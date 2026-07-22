@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from maite.protocols.object_detection import ObjectDetectionTarget
 
-from maite_datasets._base import DataLocation
+from maite_datasets._fileio import ResourcePart, URLResource
 from maite_datasets.image_classification._cifar10 import CIFAR10
 from maite_datasets.image_classification._mnist import MNIST
 from maite_datasets.image_classification._mnist_corruptions import ALL_CORRUPTIONS
@@ -120,53 +120,93 @@ class TestVOC:
     def mock_resources(self, base, year=2012, test=False):
         tmp_checksum = get_tmp_hash(base / f"VOCtrainval-{year}.tar")
         resources = [
-            DataLocation(
-                url="https://data.brainchip.com/dataset-mirror/voc/VOCtrainval_11-May-2012.tar",
-                filename="VOCtrainval-2012.tar",
-                md5=False,
-                checksum=tmp_checksum if year == 2012 else "abcdefg",
+            ResourcePart(
+                "VOCtrainval-2012",
+                (
+                    URLResource(
+                        url="https://data.brainchip.com/dataset-mirror/voc/VOCtrainval_11-May-2012.tar",
+                        filename="VOCtrainval-2012.tar",
+                        md5=False,
+                        checksum=tmp_checksum if year == 2012 else "abcdefg",
+                    ),
+                ),
             ),
-            DataLocation(
-                url="http://host.robots.ox.ac.uk/pascal/VOC/voc2011/VOCtrainval_25-May-2011.tar",
-                filename="VOCtrainval-2011.tar",
-                md5=False,
-                checksum=tmp_checksum if year == 2011 else "abcdefg",
+            ResourcePart(
+                "VOCtrainval-2011",
+                (
+                    URLResource(
+                        url="http://host.robots.ox.ac.uk/pascal/VOC/voc2011/VOCtrainval_25-May-2011.tar",
+                        filename="VOCtrainval-2011.tar",
+                        md5=False,
+                        checksum=tmp_checksum if year == 2011 else "abcdefg",
+                    ),
+                ),
             ),
-            DataLocation(
-                url="http://host.robots.ox.ac.uk/pascal/VOC/voc2010/VOCtrainval_03-May-2010.tar",
-                filename="VOCtrainval-2010.tar",
-                md5=False,
-                checksum=tmp_checksum if year == 2010 else "abcdefg",
+            ResourcePart(
+                "VOCtrainval-2010",
+                (
+                    URLResource(
+                        url="http://host.robots.ox.ac.uk/pascal/VOC/voc2010/VOCtrainval_03-May-2010.tar",
+                        filename="VOCtrainval-2010.tar",
+                        md5=False,
+                        checksum=tmp_checksum if year == 2010 else "abcdefg",
+                    ),
+                ),
             ),
-            DataLocation(
-                url="http://host.robots.ox.ac.uk/pascal/VOC/voc2009/VOCtrainval_11-May-2009.tar",
-                filename="VOCtrainval-2009.tar",
-                md5=False,
-                checksum=tmp_checksum if year == 2009 else "abcdefg",
+            ResourcePart(
+                "VOCtrainval-2009",
+                (
+                    URLResource(
+                        url="http://host.robots.ox.ac.uk/pascal/VOC/voc2009/VOCtrainval_11-May-2009.tar",
+                        filename="VOCtrainval-2009.tar",
+                        md5=False,
+                        checksum=tmp_checksum if year == 2009 else "abcdefg",
+                    ),
+                ),
             ),
-            DataLocation(
-                url="http://host.robots.ox.ac.uk/pascal/VOC/voc2008/VOCtrainval_14-Jul-2008.tar",
-                filename="VOCtrainval-2008.tar",
-                md5=False,
-                checksum="7f0ca53c1b5a838fbe946965fc106c6e86832183240af5c88e3f6c306318d42e",
+            ResourcePart(
+                "VOCtrainval-2008",
+                (
+                    URLResource(
+                        url="http://host.robots.ox.ac.uk/pascal/VOC/voc2008/VOCtrainval_14-Jul-2008.tar",
+                        filename="VOCtrainval-2008.tar",
+                        md5=False,
+                        checksum="7f0ca53c1b5a838fbe946965fc106c6e86832183240af5c88e3f6c306318d42e",
+                    ),
+                ),
             ),
-            DataLocation(
-                url="https://data.brainchip.com/dataset-mirror/voc/VOCtrainval_06-Nov-2007.tar",
-                filename="VOCtrainval-2007.tar",
-                md5=False,
-                checksum="7d8cd951101b0957ddfd7a530bdc8a94f06121cfc1e511bb5937e973020c7508",
+            ResourcePart(
+                "VOCtrainval-2007",
+                (
+                    URLResource(
+                        url="https://data.brainchip.com/dataset-mirror/voc/VOCtrainval_06-Nov-2007.tar",
+                        filename="VOCtrainval-2007.tar",
+                        md5=False,
+                        checksum="7d8cd951101b0957ddfd7a530bdc8a94f06121cfc1e511bb5937e973020c7508",
+                    ),
+                ),
             ),
-            DataLocation(
-                url="https://data.brainchip.com/dataset-mirror/voc/VOC2012test.tar",
-                filename="VOC2012test.tar",
-                md5=False,
-                checksum=get_tmp_hash(base / "VOC2012test.tar") if test else "abcdefg",
+            ResourcePart(
+                "VOC2012test",
+                (
+                    URLResource(
+                        url="https://data.brainchip.com/dataset-mirror/voc/VOC2012test.tar",
+                        filename="VOC2012test.tar",
+                        md5=False,
+                        checksum=get_tmp_hash(base / "VOC2012test.tar") if test else "abcdefg",
+                    ),
+                ),
             ),
-            DataLocation(
-                url="https://data.brainchip.com/dataset-mirror/voc/VOCtest_06-Nov-2007.tar",
-                filename="VOCtest_06-Nov-2007.tar",
-                md5=False,
-                checksum="6836888e2e01dca84577a849d339fa4f73e1e4f135d312430c4856b5609b4892",
+            ResourcePart(
+                "VOCtest_06-Nov-2007",
+                (
+                    URLResource(
+                        url="https://data.brainchip.com/dataset-mirror/voc/VOCtest_06-Nov-2007.tar",
+                        filename="VOCtest_06-Nov-2007.tar",
+                        md5=False,
+                        checksum="6836888e2e01dca84577a849d339fa4f73e1e4f135d312430c4856b5609b4892",
+                    ),
+                ),
             ),
         ]
         return resources

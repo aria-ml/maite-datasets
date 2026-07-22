@@ -9,13 +9,8 @@ from typing import Any, Literal, TypeVar
 import numpy as np
 from numpy.typing import NDArray
 
-from maite_datasets._base import (
-    BaseDatasetNumpyMixin,
-    BaseICDataset,
-    DataLocation,
-    NumpyArray,
-    NumpyImageClassificationTransform,
-)
+from maite_datasets._base import BaseDatasetNumpyMixin, BaseICDataset, NumpyArray, NumpyImageClassificationTransform
+from maite_datasets._fileio import ResourcePart, URLResource
 
 CIFARClassStringMap = Literal[
     "airplane",
@@ -72,11 +67,16 @@ class CIFAR10(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
     """
 
     _resources = [
-        DataLocation(
-            url="https://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz",
-            filename="cifar-10-binary.tar.gz",
-            md5=True,
-            checksum="c32a1d4ab5d03f1284b67883e8d87530",
+        ResourcePart(
+            "cifar10",
+            (
+                URLResource(
+                    url="https://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz",
+                    filename="cifar-10-binary.tar.gz",
+                    md5=True,
+                    checksum="c32a1d4ab5d03f1284b67883e8d87530",
+                ),
+            ),
         ),
     ]
 
