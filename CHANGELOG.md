@@ -1,5 +1,11 @@
 # Changelog for maite-datasets
 
+## v0.0.17
+
+- [fix] Fix Kaggle downloads
+- [impr] Refactor resource management and base class module
+- [fix] Improve HuggingFace download performance
+
 ## v0.0.16
 
 - [feat] Add 6 new datasets
