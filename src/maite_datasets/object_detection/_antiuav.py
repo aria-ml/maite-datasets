@@ -11,11 +11,11 @@ from defusedxml.ElementTree import parse
 from maite_datasets._base import (
     BaseDatasetNumpyMixin,
     BaseODDataset,
-    DataLocation,
     NumpyArray,
     NumpyObjectDetectionTarget,
     NumpyObjectDetectionTransform,
 )
+from maite_datasets._fileio import ResourcePart, URLResource
 
 
 class AntiUAVDetection(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str], BaseDatasetNumpyMixin):
@@ -80,23 +80,38 @@ class AntiUAVDetection(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, lis
 
     # Need to run the sha256 on the files and then store that
     _resources = [
-        DataLocation(
-            url="https://drive.google.com/uc?export=download&id=1RVsSGPUKTdmoyoPTBTWwroyulLek1eTj",
-            filename="train.zip",
-            md5=False,
-            checksum="14f927290556df60e23cedfa80dffc10dc21e4a3b6843e150cfc49644376eece",
+        ResourcePart(
+            "train",
+            (
+                URLResource(
+                    url="https://drive.google.com/uc?export=download&id=1RVsSGPUKTdmoyoPTBTWwroyulLek1eTj",
+                    filename="train.zip",
+                    md5=False,
+                    checksum="14f927290556df60e23cedfa80dffc10dc21e4a3b6843e150cfc49644376eece",
+                ),
+            ),
         ),
-        DataLocation(
-            url="https://drive.google.com/uc?export=download&id=1333uEQfGuqTKslRkkeLSCxylh6AQ0X6n",
-            filename="val.zip",
-            md5=False,
-            checksum="238be0ceb3e7c5be6711ee3247e49df2750d52f91f54f5366c68bebac112ebf8",
+        ResourcePart(
+            "val",
+            (
+                URLResource(
+                    url="https://drive.google.com/uc?export=download&id=1333uEQfGuqTKslRkkeLSCxylh6AQ0X6n",
+                    filename="val.zip",
+                    md5=False,
+                    checksum="238be0ceb3e7c5be6711ee3247e49df2750d52f91f54f5366c68bebac112ebf8",
+                ),
+            ),
         ),
-        DataLocation(
-            url="https://drive.google.com/uc?export=download&id=1L1zeW1EMDLlXHClSDcCjl3rs_A6sVai0",
-            filename="test.zip",
-            md5=False,
-            checksum="a671989a01cff98c684aeb084e59b86f4152c50499d86152eb970a9fc7fb1cbe",
+        ResourcePart(
+            "test",
+            (
+                URLResource(
+                    url="https://drive.google.com/uc?export=download&id=1L1zeW1EMDLlXHClSDcCjl3rs_A6sVai0",
+                    filename="test.zip",
+                    md5=False,
+                    checksum="a671989a01cff98c684aeb084e59b86f4152c50499d86152eb970a9fc7fb1cbe",
+                ),
+            ),
         ),
     ]
 
@@ -150,7 +165,7 @@ class AntiUAVDetection(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, lis
         else:
             # Grab only the desired data
             for resource in self._resources:
-                if self.image_set in resource.filename:
+                if self.image_set in resource.name:
                     self._resource = resource
                     resource_filepaths, resource_targets, resource_metadata = super()._load_data()
                     filepaths.extend(resource_filepaths)
@@ -160,7 +175,7 @@ class AntiUAVDetection(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, lis
         return filepaths, targets, datum_metadata
 
     def _load_data_inner(self) -> tuple[list[str], list[str], dict[str, Any]]:
-        resource_name = self._resource.filename[:-4]
+        resource_name = self._resource.name
         base_dir = self.path / resource_name
         data_folder = sorted((base_dir / "img").glob("*.jpg"))
         if not data_folder:

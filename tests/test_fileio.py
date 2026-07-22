@@ -6,12 +6,18 @@ import requests
 from requests import RequestException, Response
 
 from maite_datasets._fileio import (
+    HFResource,
+    ResourcePart,
+    URLResource,
     _download_dataset,
+    _download_part,
     _ensure_exists,
     _extract_archive,
     _extract_tar_archive,
     _extract_zip_archive,
     _hf_extract,
+    _is_kaggle,
+    _part_filename,
     _remove_folder_nest,
     _session_setup,
     _validate_file,
@@ -46,8 +52,8 @@ class MockRequestException(Response):
 
 
 class MockKaggleResponse:
-    def __init__(self, headers=None, status_code=200):
-        self.headers = headers or {}
+    def __init__(self, status_code=200):
+        self.headers = {}
         self.status_code = status_code
 
     def raise_for_status(self):
@@ -56,11 +62,92 @@ class MockKaggleResponse:
 
 
 @pytest.mark.optional
+class TestDownloadPart:
+    """Mirror fallback: a part is fetched from the first of its mirrors that works."""
+
+    def _part(self, *filenames):
+        return ResourcePart(
+            "example", tuple(URLResource(f"https://example.invalid/{f}", f, False, "sum") for f in filenames)
+        )
+
+    def test_first_working_mirror_wins_and_later_ones_are_untried(self, monkeypatch, tmp_path):
+        tried = []
+
+        def fake_ensure(resource, directory, root, download, verbose):
+            tried.append(resource.filename)
+
+        monkeypatch.setattr("maite_datasets._fileio._ensure_exists", fake_ensure)
+        _download_part(self._part("a.zip", "b.zip"), tmp_path, tmp_path)
+        assert tried == ["a.zip"]
+
+    def test_falls_through_to_next_mirror(self, capsys, monkeypatch, tmp_path):
+        tried = []
+
+        def fake_ensure(resource, directory, root, download, verbose):
+            tried.append(resource.filename)
+            if resource.filename == "a.zip":
+                raise Exception("checksum mismatch")
+
+        monkeypatch.setattr("maite_datasets._fileio._ensure_exists", fake_ensure)
+        _download_part(self._part("a.zip", "b.zip"), tmp_path, tmp_path, verbose=True)
+        assert tried == ["a.zip", "b.zip"]
+        assert "Could not retrieve example, trying the next mirror." in capsys.readouterr().out
+
+    def test_last_mirror_failure_propagates(self, monkeypatch, tmp_path):
+        def fake_ensure(resource, directory, root, download, verbose):
+            raise RuntimeError(f"{resource.filename} is gone")
+
+        monkeypatch.setattr("maite_datasets._fileio._ensure_exists", fake_ensure)
+        with pytest.raises(RuntimeError, match="b.zip is gone"):
+            _download_part(self._part("a.zip", "b.zip"), tmp_path, tmp_path)
+
+    def test_no_fallback_when_downloads_disabled(self, monkeypatch, tmp_path):
+        """Without downloads every mirror fails identically, so retrying only hides the cause."""
+        tried = []
+
+        def fake_ensure(resource, directory, root, download, verbose):
+            tried.append(resource.filename)
+            raise FileNotFoundError("download parameter is set to False")
+
+        monkeypatch.setattr("maite_datasets._fileio._ensure_exists", fake_ensure)
+        with pytest.raises(FileNotFoundError):
+            _download_part(self._part("a.zip", "b.zip"), tmp_path, tmp_path, download=False)
+        assert tried == ["a.zip"]
+
+
+@pytest.mark.optional
+class TestHFResource:
+    def test_ensure_exists_dispatches_to_the_hub(self, monkeypatch, tmp_path):
+        called = {}
+        monkeypatch.setattr(
+            "maite_datasets._fileio._hf_extract",
+            lambda repo_id, repo_type, local_dir, allow_patterns, verbose: called.update(
+                repo_id=repo_id, repo_type=repo_type, patterns=allow_patterns
+            ),
+        )
+        _ensure_exists(HFResource("owner/name", "dataset", ["train/*"]), tmp_path, tmp_path, True, False)
+        assert called == {"repo_id": "owner/name", "repo_type": "dataset", "patterns": ["train/*"]}
+
+    def test_download_false_raises_without_touching_the_hub(self, monkeypatch, tmp_path):
+        def fail(*args, **kwargs):
+            raise AssertionError("should not reach the hub")
+
+        monkeypatch.setattr("maite_datasets._fileio._hf_extract", fail)
+        with pytest.raises(FileNotFoundError, match="owner/name has not been downloaded"):
+            _ensure_exists(HFResource("owner/name"), tmp_path, tmp_path, False, False)
+
+    def test_part_filename_rejects_hf_mirrors(self):
+        """HF unpacks a file tree, so there is no archive filename to hand back."""
+        with pytest.raises(TypeError, match="fetched from huggingface"):
+            _part_filename(ResourcePart("example", (HFResource("owner/name"),)))
+
+
+@pytest.mark.optional
 class TestHelperFunctionsBaseDataset:
     @pytest.mark.parametrize("verbose", [True, False])
     def test_ensure_exists_no_zip(self, capsys, dataset_no_zip, verbose):
-        resource = ("fakeurl", "stuff.txt", True, TEMP_MD5, False)
-        _ensure_exists(*resource, dataset_no_zip.parent, dataset_no_zip.parent, True, verbose)
+        resource = URLResource("fakeurl", "stuff.txt", True, TEMP_MD5)
+        _ensure_exists(resource, dataset_no_zip.parent, dataset_no_zip.parent, True, verbose)
         if verbose:
             captured = capsys.readouterr()
             assert captured.out == "stuff.txt already exists, skipping download.\n"
@@ -68,9 +155,9 @@ class TestHelperFunctionsBaseDataset:
     @pytest.mark.parametrize("verbose", [True, False])
     def test_ensure_exists_single_zip(self, capsys, dataset_single_zip, verbose):
         checksum = get_tmp_hash(dataset_single_zip)
-        resource = ("fakeurl", "testing.zip", True, checksum, False)
+        resource = URLResource("fakeurl", "testing.zip", True, checksum)
         _ensure_exists(
-            *resource,
+            resource,
             dataset_single_zip.parent,
             dataset_single_zip.parent,
             True,
@@ -81,10 +168,10 @@ class TestHelperFunctionsBaseDataset:
             assert "Extracting testing.zip..." in captured.out
 
     def test_ensure_exists_file_exists_bad_checksum(self, dataset_no_zip):
-        resource = ("fakeurl", "stuff.txt", True, TEMP_SHA256, False)
+        resource = URLResource("fakeurl", "stuff.txt", True, TEMP_SHA256)
         err_msg = "File checksum mismatch. Remove current file and retry download."
         with pytest.raises(Exception) as e:
-            _ensure_exists(*resource, dataset_no_zip.parent, dataset_no_zip.parent, False)
+            _ensure_exists(resource, dataset_no_zip.parent, dataset_no_zip.parent, False)
         assert err_msg in str(e.value)
 
     def test_ensure_exists_download_non_zip(self, capsys, mnist_folder, monkeypatch, tmp_path):
@@ -98,8 +185,8 @@ class TestHelperFunctionsBaseDataset:
         monkeypatch.setattr("maite_datasets._fileio._download_dataset", fake_download)
 
         url = "https://example.invalid/mnist.npz"
-        resource = (url, "mnist.npz", False, checksum, False)
-        _ensure_exists(*resource, mnist_folder, mnist_folder.parent, True, True)
+        resource = URLResource(url, "mnist.npz", False, checksum)
+        _ensure_exists(resource, mnist_folder, mnist_folder.parent, True, True)
         captured = capsys.readouterr()
         assert f"Downloading mnist.npz from {url}" in captured.out
 
@@ -109,11 +196,14 @@ class TestHelperFunctionsBaseDataset:
 
         monkeypatch.setattr("maite_datasets._fileio._download_dataset", fake_download)
 
-        resource = ("https://example.invalid/mnist.npz", "mnist.npz", False, "abc", False)
-        err_msg = "File checksum mismatch. Remove current file and retry download."
+        resource = URLResource("https://example.invalid/mnist.npz", "mnist.npz", False, "abc")
+        err_msg = "File checksum mismatch on downloaded mnist.npz. Retry the download."
         with pytest.raises(Exception) as e:
-            _ensure_exists(*resource, mnist_folder, mnist_folder.parent, True, False)
+            _ensure_exists(resource, mnist_folder, mnist_folder.parent, True, False)
         assert err_msg in str(e.value)
+        # The corrupt download is discarded, so a retry downloads again rather than
+        # tripping the "already exists" branch and failing identically forever.
+        assert not (mnist_folder / "mnist.npz").exists()
 
     @pytest.mark.parametrize("verbose", [True, False])
     def test_ensure_exists_download_zip(self, capsys, mnist_folder, verbose, monkeypatch, tmp_path):
@@ -132,17 +222,17 @@ class TestHelperFunctionsBaseDataset:
 
         monkeypatch.setattr("maite_datasets._fileio._download_dataset", fake_download)
 
-        resource = ("https://example.invalid/fake.zip", "2021.zip", True, checksum, False)
-        _ensure_exists(*resource, mnist_folder, mnist_folder.parent, True, verbose)
+        resource = URLResource("https://example.invalid/fake.zip", "2021.zip", True, checksum)
+        _ensure_exists(resource, mnist_folder, mnist_folder.parent, True, verbose)
         if verbose:
             captured = capsys.readouterr()
-            assert f"Extracting {resource[1]}..." in captured.out
+            assert f"Extracting {resource.filename}..." in captured.out
 
     def test_ensure_exists_error(self, dataset_no_zip):
-        resource = ("fakeurl", "something.zip", True, "", False)
+        resource = URLResource("fakeurl", "something.zip", True, "")
         err_msg = "Data could not be loaded with the provided root directory,"
         with pytest.raises(FileNotFoundError) as e:
-            _ensure_exists(*resource, dataset_no_zip.parent, dataset_no_zip.parent, False)
+            _ensure_exists(resource, dataset_no_zip.parent, dataset_no_zip.parent, False)
         assert err_msg in str(e.value)
 
     def test_download_dataset_http_error(self, monkeypatch):
@@ -161,7 +251,21 @@ class TestHelperFunctionsBaseDataset:
         with pytest.raises(ValueError):
             _download_dataset(url="http://mock/", file_path=Path("fake/path"))
 
-    def test_non_kaggle_sets_headers_and_no_request_made(self, monkeypatch):
+    @pytest.mark.parametrize(
+        "url, expected",
+        [
+            ("https://www.kaggle.com/api/v1/datasets/download/owner/name?datasetVersionNumber=1", True),
+            ("https://kaggle.com/api/v1/datasets/download/owner/name", True),
+            ("https://huggingface.co/datasets/owner/name/resolve/main/train.zip", False),
+            # Host must *end* in kaggle.com -- a look-alike domain must not opt in.
+            ("https://www.kaggle.com.example.invalid/archive.zip", False),
+            ("not-a-url", False),
+        ],
+    )
+    def test_is_kaggle(self, url, expected):
+        assert _is_kaggle(url) is expected
+
+    def test_non_kaggle_sets_referer_and_makes_no_request(self, monkeypatch):
         called = False
 
         def mock_get(*args, **kwargs):
@@ -170,31 +274,33 @@ class TestHelperFunctionsBaseDataset:
             return MockKaggleResponse()
 
         monkeypatch.setattr(requests.Session, "get", mock_get)
-        session = _session_setup(kaggle=False, timeout=30)
+        session = _session_setup("https://example.invalid/archive.zip", timeout=30)
         assert called is False
         assert session.headers["Referer"] == "https://google.com/"
-        assert len(session.cookies) == 0
 
-    def test_kaggle_extracts_ka_sessionid_from_set_cookie(self, monkeypatch):
-        session = _session_setup(kaggle=True, timeout=30)
-        assert session.cookies.get("ka_sessionid") is not None
-        assert "Referer" not in session.headers
+    def test_kaggle_warms_cookies_from_landing_page(self, monkeypatch):
+        requested = []
 
-    def test_kaggle_no_ka_sessionid_in_set_cookie_leaves_cookies_empty(self, monkeypatch):
-        def mock_get(self, url, headers=None, stream=None, timeout=None):
-            return MockKaggleResponse(headers={"Set-Cookie": "other_cookie=xyz; Path=/"})
+        def mock_get(self, url, **kwargs):
+            requested.append(url)
+            # Stand in for the Set-Cookie handling requests does on a real response.
+            self.cookies.set("ka_sessionid", "abc123")
+            return MockKaggleResponse()
 
         monkeypatch.setattr(requests.Session, "get", mock_get)
-        session = _session_setup(kaggle=True, timeout=30)
-        assert session.cookies.get("ka_sessionid", "") == ""
+        session = _session_setup("https://www.kaggle.com/api/v1/datasets/download/owner/name", timeout=30)
+        assert requested == ["https://www.kaggle.com"]
+        assert session.cookies.get("ka_sessionid") == "abc123"
+        # No Referer on the Kaggle path; the warm-up cookies are what authorize the download.
+        assert "Referer" not in session.headers
 
-    def test_kaggle_http_error_on_first_request_propagates(self, monkeypatch):
-        def mock_get(self, url, headers=None, stream=None, timeout=None):
+    def test_kaggle_http_error_on_warmup_propagates(self, monkeypatch):
+        def mock_get(self, url, **kwargs):
             return MockKaggleResponse(status_code=403)
 
         monkeypatch.setattr(requests.Session, "get", mock_get)
         with pytest.raises(requests.exceptions.HTTPError):
-            _session_setup(kaggle=True, timeout=30)
+            _session_setup("https://www.kaggle.com/api/v1/datasets/download/owner/name", timeout=30)
 
     @pytest.mark.parametrize("use_md5, hash_value", [(True, TEMP_MD5), (False, TEMP_SHA256)])
     def test_validate_file(self, dataset_no_zip, use_md5, hash_value):
@@ -278,15 +384,17 @@ class TestDownloadDataset:
             {"id": "abc123", "confirm": "t"},
         )
 
-    def test_download_html_without_form_is_written_as_is(self, monkeypatch, tmp_path):
+    def test_download_html_without_form_raises(self, monkeypatch, tmp_path):
+        """An HTML page that isn't Drive's confirm form is an error/login page, not a file."""
         monkeypatch.setattr(
             requests.Session,
             "get",
             lambda *args, **kwargs: MockResponse(b"<html>nope</html>", content_type="text/html", text="<html>nope"),
         )
-        file_path = tmp_path / "out.html"
-        _download_dataset(url="http://mock/", file_path=file_path)
-        assert file_path.read_bytes() == b"<html>nope</html>"
+        file_path = tmp_path / "out.bin"
+        with pytest.raises(RuntimeError, match="expected a file, received a web page"):
+            _download_dataset(url="http://mock/", file_path=file_path)
+        assert not file_path.exists()
 
 
 @pytest.mark.optional

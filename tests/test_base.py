@@ -2,7 +2,7 @@ import hashlib
 
 import pytest
 
-from maite_datasets._base import DataLocation
+from maite_datasets._fileio import ResourcePart, URLResource
 from maite_datasets.image_classification._mnist import MNIST
 from maite_datasets.object_detection._voc import VOCDetection
 
@@ -24,11 +24,16 @@ class TestBaseDataset:
     def test_get_resource(self, capsys, mnist_npy, verbose, monkeypatch):
         def mock_resources(mnist_npy):
             resources = [
-                DataLocation(
-                    url="https://storage.googleapis.com/tensorflow/tf-keras-datasets/mnist.npz",
-                    filename="mnist.npz",
-                    md5=False,
-                    checksum=get_tmp_hash(mnist_npy / "mnist.npz"),
+                ResourcePart(
+                    "mnist",
+                    (
+                        URLResource(
+                            url="https://storage.googleapis.com/tensorflow/tf-keras-datasets/mnist.npz",
+                            filename="mnist.npz",
+                            md5=False,
+                            checksum=get_tmp_hash(mnist_npy / "mnist.npz"),
+                        ),
+                    ),
                 ),
             ]
             return resources
@@ -40,7 +45,9 @@ class TestBaseDataset:
         assert img.shape == (1, 28, 28)
         if verbose:
             captured = capsys.readouterr()
-            assert "Determining if mnist.npz needs to be downloaded." in captured.out
+            # Reported by part name, which is stable across mirrors, rather than by the
+            # archive filename, which is not.
+            assert "Determining if mnist needs to be downloaded." in captured.out
             assert "No download needed, loaded data successfully." in captured.out
 
 
@@ -48,53 +55,93 @@ class TestBaseDataset:
 class TestBaseVOCDataset:
     def mock_resources(self, base):
         resources = [
-            DataLocation(
-                url="https://data.brainchip.com/dataset-mirror/voc/VOCtrainval_11-May-2012.tar",
-                filename="VOCtrainval-2012.tar",
-                md5=False,
-                checksum=get_tmp_hash(base / "VOCtrainval-2012.tar"),
+            ResourcePart(
+                "VOCtrainval-2012",
+                (
+                    URLResource(
+                        url="https://data.brainchip.com/dataset-mirror/voc/VOCtrainval_11-May-2012.tar",
+                        filename="VOCtrainval-2012.tar",
+                        md5=False,
+                        checksum=get_tmp_hash(base / "VOCtrainval-2012.tar"),
+                    ),
+                ),
             ),
-            DataLocation(
-                url="http://host.robots.ox.ac.uk/pascal/VOC/voc2011/VOCtrainval_25-May-2011.tar",
-                filename="VOCtrainval_25-May-2011.tar",
-                md5=False,
-                checksum="0a7f5f5d154f7290ec65ec3f78b72ef72c6d93ff6d79acd40dc222a9ee5248ba",
+            ResourcePart(
+                "VOCtrainval_25-May-2011",
+                (
+                    URLResource(
+                        url="http://host.robots.ox.ac.uk/pascal/VOC/voc2011/VOCtrainval_25-May-2011.tar",
+                        filename="VOCtrainval_25-May-2011.tar",
+                        md5=False,
+                        checksum="0a7f5f5d154f7290ec65ec3f78b72ef72c6d93ff6d79acd40dc222a9ee5248ba",
+                    ),
+                ),
             ),
-            DataLocation(
-                url="http://host.robots.ox.ac.uk/pascal/VOC/voc2010/VOCtrainval_03-May-2010.tar",
-                filename="VOCtrainval_03-May-2010.tar",
-                md5=False,
-                checksum="1af4189cbe44323ab212bff7afbc7d0f55a267cc191eb3aac911037887e5c7d4",
+            ResourcePart(
+                "VOCtrainval_03-May-2010",
+                (
+                    URLResource(
+                        url="http://host.robots.ox.ac.uk/pascal/VOC/voc2010/VOCtrainval_03-May-2010.tar",
+                        filename="VOCtrainval_03-May-2010.tar",
+                        md5=False,
+                        checksum="1af4189cbe44323ab212bff7afbc7d0f55a267cc191eb3aac911037887e5c7d4",
+                    ),
+                ),
             ),
-            DataLocation(
-                url="http://host.robots.ox.ac.uk/pascal/VOC/voc2009/VOCtrainval_11-May-2009.tar",
-                filename="VOCtrainval_11-May-2009.tar",
-                md5=False,
-                checksum="11cbe1741fb5bdadbbca3c08e9ec62cd95c14884845527d50847bc2cf57e7fd6",
+            ResourcePart(
+                "VOCtrainval_11-May-2009",
+                (
+                    URLResource(
+                        url="http://host.robots.ox.ac.uk/pascal/VOC/voc2009/VOCtrainval_11-May-2009.tar",
+                        filename="VOCtrainval_11-May-2009.tar",
+                        md5=False,
+                        checksum="11cbe1741fb5bdadbbca3c08e9ec62cd95c14884845527d50847bc2cf57e7fd6",
+                    ),
+                ),
             ),
-            DataLocation(
-                url="http://host.robots.ox.ac.uk/pascal/VOC/voc2008/VOCtrainval_14-Jul-2008.tar",
-                filename="VOCtrainval_14-Jul-2008.tar",
-                md5=False,
-                checksum="7f0ca53c1b5a838fbe946965fc106c6e86832183240af5c88e3f6c306318d42e",
+            ResourcePart(
+                "VOCtrainval_14-Jul-2008",
+                (
+                    URLResource(
+                        url="http://host.robots.ox.ac.uk/pascal/VOC/voc2008/VOCtrainval_14-Jul-2008.tar",
+                        filename="VOCtrainval_14-Jul-2008.tar",
+                        md5=False,
+                        checksum="7f0ca53c1b5a838fbe946965fc106c6e86832183240af5c88e3f6c306318d42e",
+                    ),
+                ),
             ),
-            DataLocation(
-                url="https://data.brainchip.com/dataset-mirror/voc/VOCtrainval_06-Nov-2007.tar",
-                filename="VOCtrainval_06-Nov-2007.tar",
-                md5=False,
-                checksum="7d8cd951101b0957ddfd7a530bdc8a94f06121cfc1e511bb5937e973020c7508",
+            ResourcePart(
+                "VOCtrainval_06-Nov-2007",
+                (
+                    URLResource(
+                        url="https://data.brainchip.com/dataset-mirror/voc/VOCtrainval_06-Nov-2007.tar",
+                        filename="VOCtrainval_06-Nov-2007.tar",
+                        md5=False,
+                        checksum="7d8cd951101b0957ddfd7a530bdc8a94f06121cfc1e511bb5937e973020c7508",
+                    ),
+                ),
             ),
-            DataLocation(
-                url="https://data.brainchip.com/dataset-mirror/voc/VOC2012test.tar",
-                filename="VOC2012test.tar",
-                md5=False,
-                checksum=get_tmp_hash(base / "VOC2012test.tar"),
+            ResourcePart(
+                "VOC2012test",
+                (
+                    URLResource(
+                        url="https://data.brainchip.com/dataset-mirror/voc/VOC2012test.tar",
+                        filename="VOC2012test.tar",
+                        md5=False,
+                        checksum=get_tmp_hash(base / "VOC2012test.tar"),
+                    ),
+                ),
             ),
-            DataLocation(
-                url="https://data.brainchip.com/dataset-mirror/voc/VOCtest_06-Nov-2007.tar",
-                filename="VOCtest_06-Nov-2007.tar",
-                md5=False,
-                checksum="6836888e2e01dca84577a849d339fa4f73e1e4f135d312430c4856b5609b4892",
+            ResourcePart(
+                "VOCtest_06-Nov-2007",
+                (
+                    URLResource(
+                        url="https://data.brainchip.com/dataset-mirror/voc/VOCtest_06-Nov-2007.tar",
+                        filename="VOCtest_06-Nov-2007.tar",
+                        md5=False,
+                        checksum="6836888e2e01dca84577a849d339fa4f73e1e4f135d312430c4856b5609b4892",
+                    ),
+                ),
             ),
         ]
         return resources

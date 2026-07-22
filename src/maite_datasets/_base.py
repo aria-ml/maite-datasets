@@ -18,7 +18,7 @@ from maite.protocols import object_detection as od
 from numpy.typing import ArrayLike, NDArray
 from PIL import Image
 
-from maite_datasets._fileio import _ensure_exists
+from maite_datasets._fileio import ResourcePart, _download_part, _print
 from maite_datasets._lazy import TIFF_EXTENSIONS, LazyArray, chw_loaders, tiff_chw_load, tiff_chw_shape
 from maite_datasets.protocols import Array
 
@@ -180,14 +180,6 @@ class BaseDataset(Dataset[tuple[_TArray, _TTarget, DatumMetadata]]):
         return f"{title}\n{sep}{nt}{nt.join(attrs)}"
 
 
-class DataLocation(NamedTuple):
-    url: str
-    filename: str
-    md5: bool
-    checksum: str
-    kaggle: bool = False
-
-
 def _dataset_dir(root: Path, name: str) -> Path:
     """Resolve (and create) the per-dataset folder named after `name` under `root`.
 
@@ -218,13 +210,12 @@ class BaseDownloadedDataset(
     Base class for internet downloaded datasets.
     """
 
-    # Each subclass should override the attributes below.
-    # Each resource tuple must contain:
-    #    'url': str, the URL to download from
-    #    'filename': str, the name of the file once downloaded
-    #    'md5': boolean, True if it's the checksum value is md5
-    #    'checksum': str, the associated checksum for the downloaded file
-    _resources: list[DataLocation]
+    # Each subclass should override the attributes below. ``_resources`` lists the
+    # *parts* a dataset is assembled from -- a split, a year, an archive chunk -- and
+    # each part carries the interchangeable mirrors it can be fetched from. Datasets
+    # published in one place have a single mirror; the nesting is what keeps "which
+    # piece of the dataset" and "where to get that piece" from being the same axis.
+    _resources: list[ResourcePart]
     _resource_index: int = 0
     index2label: dict[int, str]
 
@@ -236,21 +227,19 @@ class BaseDownloadedDataset(
         download: bool = False,
         verbose: bool = False,
         lazy: bool = False,
-        hf: bool = False,
     ) -> None:
         super().__init__(transforms)
         self.lazy = lazy
         self._root: Path = root.absolute() if isinstance(root, Path) else Path(root).absolute()
         self.image_set = image_set
         self._verbose = verbose
-        self.hf_dataset = hf
 
         # Internal Attributes
         self._download = download
         self._filepaths: list[str]
         self._targets: _TRawTarget
         self._datum_metadata: dict[str, list[Any]]
-        self._resource: DataLocation = self._resources[self._resource_index]
+        self._resource: ResourcePart = self._resources[self._resource_index]
         self._label2index = {v: k for k, v in self.index2label.items()}
 
         self.metadata: DatasetMetadata = DatasetMetadata(
@@ -263,10 +252,7 @@ class BaseDownloadedDataset(
 
         # Load the data
         self.path: Path = self._get_dataset_dir()
-        if self.hf_dataset:
-            self._filepaths, self._targets, self._datum_metadata = self._load_hf_data()
-        else:
-            self._filepaths, self._targets, self._datum_metadata = self._load_data()
+        self._filepaths, self._targets, self._datum_metadata = self._load_data()
         self.size: int = len(self._filepaths)
 
     @property
@@ -284,27 +270,26 @@ class BaseDownloadedDataset(
     def _unique_id(self) -> str:
         return f"{self.__class__.__name__}_{self.image_set}"
 
+    def _download_part(self, part: ResourcePart, directory: Path | None = None) -> None:
+        """Fetch `part` into `directory` (the dataset folder by default), trying each mirror."""
+        _download_part(part, self.path if directory is None else directory, self._root, self._download, self._verbose)
+
     def _load_data(self) -> tuple[list[str], _TRawTarget, dict[str, Any]]:
         """
         Function to determine if data can be accessed or if it needs to be downloaded and/or extracted.
         """
-        if self._verbose:
-            print(f"Determining if {self._resource.filename} needs to be downloaded.")
+        _print(f"Determining if {self._resource.name} needs to be downloaded.", self._verbose)
 
         try:
             result = self._load_data_inner()
-            if self._verbose:
-                print("No download needed, loaded data successfully.")
+            _print("No download needed, loaded data successfully.", self._verbose)
         except FileNotFoundError:
-            _ensure_exists(*self._resource, self.path, self._root, self._download, self._verbose)
+            self._download_part(self._resource)
             result = self._load_data_inner()
         return result
 
     @abstractmethod
     def _load_data_inner(self) -> tuple[list[str], _TRawTarget, dict[str, Any]]: ...
-
-    @abstractmethod
-    def _load_hf_data(self) -> tuple[list[str], _TRawTarget, dict[str, Any]]: ...
 
     def _to_datum_metadata(self, index: int, metadata: dict[str, Any]) -> DatumMetadata:
         _id = metadata.pop("id", index)

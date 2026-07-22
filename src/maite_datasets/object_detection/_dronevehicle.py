@@ -12,7 +12,6 @@ from defusedxml.ElementTree import parse
 from maite_datasets._base import (
     BaseDatasetNumpyMixin,
     BaseODDataset,
-    DataLocation,
     DatumMetadata,
     NumpyArray,
     NumpyObjectDetectionTarget,
@@ -20,7 +19,7 @@ from maite_datasets._base import (
     ObjectDetectionTargetTuple,
     _merge_datum_metadata,
 )
-from maite_datasets._fileio import _extract_archive, _hf_extract, _print, _remove_folder_nest
+from maite_datasets._fileio import ResourcePart, URLResource, _remove_folder_nest
 
 
 class DroneVehicle(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str], BaseDatasetNumpyMixin):
@@ -85,36 +84,17 @@ class DroneVehicle(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[st
     Data License: None provided
     """
 
-    _repo_id: str = "McCheng/DroneVehicle"
-    _repo_type: Literal["dataset", "model"] = "dataset"
-    _limit: list[str] | str | None
-
     _resources = [
-        DataLocation(
-            url="https://www.kaggle.com/api/v1/datasets/download/brendanalvey/visdrone-dronevehicle?datasetVersionNumber=2",
-            filename="archive.zip",
-            md5=False,
-            checksum="35271ccb2adfd7e34719ad59616fcecb398a798c0bcbc5cded6e30aa62835b78",
-            kaggle=True,
-        ),
-        # These pull directly from huggingface - having issues with bad downloads
-        DataLocation(
-            url="https://huggingface.co/datasets/McCheng/DroneVehicle/resolve/main/train.zip?download=true",
-            filename="train.zip",
-            md5=False,
-            checksum="d22eccae518728352b40bb758b383e64db2b1b38e3d8c5d14406724dc869614f",
-        ),
-        DataLocation(
-            url="https://huggingface.co/datasets/McCheng/DroneVehicle/resolve/main/val.zip?download=true",
-            filename="val.zip",
-            md5=False,
-            checksum="043b7944ebb8ce076c1e5cfd37c33de6a59a9f62cf47c0f028387f703d4f5250",
-        ),
-        DataLocation(
-            url="https://huggingface.co/datasets/McCheng/DroneVehicle/resolve/main/test.zip?download=true",
-            filename="test.zip",
-            md5=False,
-            checksum="94bf47e493e7a57fd5d900439f614f339e7b6c7181e4d781bcfebaeb963ffd8e",
+        ResourcePart(
+            "dronevehicle",
+            (
+                URLResource(
+                    url="https://www.kaggle.com/api/v1/datasets/download/brendanalvey/visdrone-dronevehicle?datasetVersionNumber=2",
+                    filename="archive.zip",
+                    md5=False,
+                    checksum="35271ccb2adfd7e34719ad59616fcecb398a798c0bcbc5cded6e30aa62835b78",
+                ),
+            ),
         ),
     ]
 
@@ -142,57 +122,17 @@ class DroneVehicle(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[st
             download,
             verbose,
             lazy,
-            hf=False,  # Can switch to True, if desired
         )
-
-    def _load_hf_data(self) -> tuple[list[str], list[str], dict[str, list[Any]]]:
-        try:
-            data, annotations, file_data = self._load_data_inner()
-        except FileNotFoundError:
-            self._limit = f"{self.image_set}.zip" if self.image_set != "base" else None
-            _print("Downloading files from huggingface.", self._verbose)
-
-            _hf_extract(
-                repo_id=self._repo_id, repo_type=self._repo_type, local_dir=self.path, allow_patterns=self._limit
-            )
-
-            # If base, load all resources
-            if self.image_set == "base":
-                _print("Extracting train.zip, val.zip, and test.zip ...", self._verbose)
-                for file in ["train.zip", "val.zip", "test.zip"]:
-                    filepath = self.path / file
-                    file_ext = filepath.suffix
-                    _extract_archive(file_ext, filepath, self.path, False, self._verbose)
-
-            data, annotations, file_data = self._load_data_inner()
-
-        return data, annotations, file_data
-
-    # Uncomment if we want to re-enable huggingface downloads
-    # def _load_data(self) -> tuple[list[str], list[str], dict[str, list[Any]]]:
-    #     filepaths: list[str] = []
-    #     targets: list[str] = []
-    #     datum_metadata: dict[str, list[Any]] = {}
-
-    #     # If base, load all resources; otherwise grab only the desired data
-    #     for resource in self._resources[1:]:
-    #         if self.image_set != "base" and self.image_set not in resource.filename:
-    #             continue
-    #         self._resource = resource
-    #         resource_filepaths, resource_targets, resource_metadata = super()._load_data()
-    #         filepaths.extend(resource_filepaths)
-    #         targets.extend(resource_targets)
-    #         _merge_datum_metadata(datum_metadata, resource_metadata)
-
-    #     return filepaths, targets, datum_metadata
 
     def _load_data_inner(self) -> tuple[list[str], list[str], dict[str, Any]]:
         filepaths: list[str] = []
         targets: list[str] = []
         datum_metadata: dict[str, list[Any]] = {}
 
-        if "archive" in self._resource.filename:
-            self._remove_nested_folder()
+        # The Kaggle archive lands nested under VisDrone-DroneVehicle/; flattening is a
+        # no-op once done (and for the huggingface layout, which is already flat), so it
+        # runs unconditionally rather than sniffing which resource we came from.
+        self._remove_nested_folder()
 
         for resource in ["train", "val", "test"]:
             if self.image_set != "base" and resource != self.image_set:
@@ -213,6 +153,16 @@ class DroneVehicle(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[st
         nested = self.path / "VisDrone-DroneVehicle"
         if nested.is_dir():
             _remove_folder_nest(nested, verbose=self._verbose)
+
+    @staticmethod
+    def _infrared_path(rgb_path: str) -> str:
+        """Paired IR image for `rgb_path`: ``<split>img/x.jpg`` -> ``<split>imgr/x.jpg``.
+
+        Rebuilt from the path components rather than by string replacement, so a root
+        directory that itself contains a segment ending in ``img`` is left alone.
+        """
+        path = Path(rgb_path)
+        return str(path.parent.with_name(f"{path.parent.name}r") / path.name)
 
     def _read_annotations(self, annotation: str) -> tuple[list[list[float]], list[int], dict[str, Any]]:
         """Function for extracting the info for the label and boxes"""
@@ -237,8 +187,11 @@ class DroneVehicle(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[st
 
         labels = [self._label2index[lbl] for lbl in text_labels]
 
-        rgb_annotation = annotation.replace("labelr/", "label/")
-        root = parse(rgb_annotation).getroot()
+        # Paired RGB annotation: <split>labelr/x.xml -> <split>label/x.xml, built from
+        # path components so a root directory ending in "labelr" is left alone.
+        ir_annotation = Path(annotation)
+        rgb_annotation = ir_annotation.parent.with_name(ir_annotation.parent.name.removesuffix("r"))
+        root = parse(str(rgb_annotation / ir_annotation.name)).getroot()
         if root is not None:
             additional_meta["rgb_filename"] = root.findtext("filename", default="")
             additional_meta["image_depth"] += int(root.findtext("size/depth", default="0"))
@@ -262,7 +215,7 @@ class DroneVehicle(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[st
         # Stack the paired IR channel onto the RGB image. Both are read eagerly:
         # np.concatenate materializes its inputs, so lazy mode cannot defer here.
         rgb_img = np.asarray(self._get_image(self._filepaths[index]))
-        ir_img = np.asarray(self._get_image(self._filepaths[index].replace("img/", "imgr/")))
+        ir_img = np.asarray(self._get_image(self._infrared_path(self._filepaths[index])))
         img = np.concatenate([rgb_img, ir_img[:1]])
         # Create the Object Detection Target
         # Cast target explicitly to ODTarget as namedtuple does not provide any typing metadata

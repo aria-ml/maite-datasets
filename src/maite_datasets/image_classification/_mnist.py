@@ -12,10 +12,10 @@ from numpy.typing import NDArray
 from maite_datasets._base import (
     BaseDatasetNumpyMixin,
     BaseICDataset,
-    DataLocation,
     NumpyArray,
     NumpyImageClassificationTransform,
 )
+from maite_datasets._fileio import ResourcePart, URLResource, _part_filename
 from maite_datasets.image_classification._mnist_corruptions import ALL_CORRUPTIONS
 
 MNISTClassStringMap = Literal["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
@@ -105,11 +105,16 @@ class MNIST(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
     """  # noqa: E501
 
     _resources = [
-        DataLocation(
-            url="https://storage.googleapis.com/tensorflow/tf-keras-datasets/mnist.npz",
-            filename="mnist.npz",
-            md5=False,
-            checksum="731c5ac602752760c8e48fbffcf8c3b850d9dc2a2aedcf2cc48468fc17b673d1",
+        ResourcePart(
+            "mnist",
+            (
+                URLResource(
+                    url="https://storage.googleapis.com/tensorflow/tf-keras-datasets/mnist.npz",
+                    filename="mnist.npz",
+                    md5=False,
+                    checksum="731c5ac602752760c8e48fbffcf8c3b850d9dc2a2aedcf2cc48468fc17b673d1",
+                ),
+            ),
         ),
     ]
 
@@ -154,7 +159,7 @@ class MNIST(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
 
     def _load_data_inner(self) -> tuple[list[str], list[int], dict[str, Any]]:
         """Function to load in the file paths for the data and labels from the correct data format"""
-        file_path = self.path / self._resource.filename
+        file_path = self.path / _part_filename(self._resource)
         self._loaded_data, labels = self._grab_data(file_path)
 
         if self.corruption is not None:

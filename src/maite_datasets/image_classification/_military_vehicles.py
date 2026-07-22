@@ -12,12 +12,11 @@ from numpy.typing import NDArray
 from maite_datasets._base import (
     BaseDatasetNumpyMixin,
     BaseICDataset,
-    DataLocation,
     NumpyArray,
     NumpyImageClassificationTransform,
     _merge_datum_metadata,
 )
-from maite_datasets._fileio import _hf_extract, _print
+from maite_datasets._fileio import HFResource, ResourcePart
 
 
 class MilitaryVehicles(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
@@ -80,16 +79,13 @@ class MilitaryVehicles(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
     """
 
     _repo_id: str = "leibnitz-lab/military_vehicles"
-    _repo_type: Literal["dataset", "model"] = "dataset"
-    _limit: list[str] | str | None
 
-    # Empty resources to satisfy base class
+    # Published only on huggingface. The class-level entry fetches the whole repo;
+    # _load_data narrows it to the selected image set before anything downloads.
     _resources = [
-        DataLocation(
-            url="",
-            filename="",
-            md5=False,
-            checksum="",
+        ResourcePart(
+            "military_vehicles",
+            (HFResource(repo_id=_repo_id),),
         ),
     ]
 
@@ -147,47 +143,45 @@ class MilitaryVehicles(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
         verbose: bool = False,
         lazy: bool = False,
     ) -> None:
-        super().__init__(root, image_set, transforms, download, verbose, lazy, hf=True)
+        super().__init__(root, image_set, transforms, download, verbose, lazy)
 
-    def _load_hf_data(self) -> tuple[list[str], list[int], dict[str, Any]]:
-        """Function to download the data from huggingface and load in the file paths for the data and labels"""
+    def _load_data(self) -> tuple[list[str], Sequence[int], dict[str, Any]]:
+        # Only the selected image set is worth fetching, and the pattern that expresses
+        # that depends on self.image_set -- so the part is narrowed here rather than
+        # declared statically on the class.
+        image_sets = ["train", "test"] if self.image_set == "base" else [self.image_set]
+        self._resource = ResourcePart(
+            "military_vehicles",
+            (HFResource(repo_id=self._repo_id, allow_patterns=[f"{img_set}_fine/*" for img_set in image_sets]),),
+        )
+        return super()._load_data()
+
+    def _load_data_inner(self) -> tuple[list[str], list[int], dict[str, Any]]:
         filepaths: list[str] = []
         targets: list[int] = []
         datum_metadata: dict[str, list[Any]] = {}
 
         image_sets = ["train", "test"] if self.image_set == "base" else [self.image_set]
-
-        if (self.path / "train/images").is_dir() or (self.path / "val/images").is_dir():
-            _print("Data already downloaded, skipping download.", self._verbose)
-        else:
-            _print("Downloading files from huggingface.", self._verbose)
-
-            self._limit = [f"{img_set}_fine/*" for img_set in image_sets]
-
-            _hf_extract(
-                repo_id=self._repo_id, repo_type=self._repo_type, local_dir=self.path, allow_patterns=self._limit
-            )
-
         for img_set in image_sets:
-            annotations: NDArray = np.load(self.path / f"{img_set}_fine/{img_set}_true_fine.npy")
+            annotations_path = self.path / f"{img_set}_fine/{img_set}_true_fine.npy"
+            if not annotations_path.exists():
+                raise FileNotFoundError
+            annotations: NDArray = np.load(annotations_path)
             targets.extend(annotations.tolist())
             for group in self._label2index:
-                data, _, file_data = self._load_data_inner(img_set, group)
+                data, file_data = self._load_group(img_set, group)
                 filepaths.extend(data)
                 _merge_datum_metadata(datum_metadata, file_data)
 
         return filepaths, targets, datum_metadata
 
-    def _load_data_inner(
-        self, set_name: str | None = None, group_name: str | None = None
-    ) -> tuple[list[str], list[int], dict[str, Any]]:
-        group_dir = str(group_name).replace(" ", "_")
+    def _load_group(self, set_name: str, group_name: str) -> tuple[list[str], dict[str, Any]]:
+        """Paths and per-datum metadata for one class folder within one image set."""
+        group_dir = group_name.replace(" ", "_")
         base_dir = self.path / f"{set_name}_fine/{group_dir}"
         data_folder = sorted(base_dir.glob("*.jpg"))
         if not data_folder:
             raise FileNotFoundError
 
         file_data = {"image_id": [f"{group_dir}_{entry.stem}" for entry in data_folder]}
-        data = [str(entry) for entry in data_folder]
-
-        return data, [], file_data
+        return [str(entry) for entry in data_folder], file_data

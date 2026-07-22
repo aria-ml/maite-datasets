@@ -11,10 +11,10 @@ import numpy as np
 from maite_datasets._base import (
     BaseDatasetNumpyMixin,
     BaseICDataset,
-    DataLocation,
     NumpyArray,
     NumpyImageClassificationTransform,
 )
+from maite_datasets._fileio import ResourcePart, URLResource
 
 
 class Ships(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
@@ -68,11 +68,16 @@ class Ships(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
     """
 
     _resources = [
-        DataLocation(
-            url="https://zenodo.org/record/3611230/files/ships-in-satellite-imagery.zip",
-            filename="ships-in-satellite-imagery.zip",
-            md5=True,
-            checksum="b2e8a41ed029592b373bd72ee4b89f32",
+        ResourcePart(
+            "ships",
+            (
+                URLResource(
+                    url="https://zenodo.org/record/3611230/files/ships-in-satellite-imagery.zip",
+                    filename="ships-in-satellite-imagery.zip",
+                    md5=True,
+                    checksum="b2e8a41ed029592b373bd72ee4b89f32",
+                ),
+            ),
         ),
     ]
 

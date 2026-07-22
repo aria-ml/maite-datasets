@@ -9,11 +9,11 @@ from typing import Any, Literal
 from maite_datasets._base import (
     BaseDatasetNumpyMixin,
     BaseODDataset,
-    DataLocation,
     NumpyArray,
     NumpyObjectDetectionTarget,
     NumpyObjectDetectionTransform,
 )
+from maite_datasets._fileio import ResourcePart, URLResource
 
 
 class MILCO(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str], BaseDatasetNumpyMixin):
@@ -82,35 +82,60 @@ class MILCO(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str
     """
 
     _resources = [
-        DataLocation(
-            url="https://figshare.com/ndownloader/files/43169002",
-            filename="2015.zip",
-            md5=True,
-            checksum="93dfbb4fb7987734152c372496b4884c",
+        ResourcePart(
+            "2015",
+            (
+                URLResource(
+                    url="https://figshare.com/ndownloader/files/43169002",
+                    filename="2015.zip",
+                    md5=True,
+                    checksum="93dfbb4fb7987734152c372496b4884c",
+                ),
+            ),
         ),
-        DataLocation(
-            url="https://figshare.com/ndownloader/files/43169005",
-            filename="2017.zip",
-            md5=True,
-            checksum="9c2de230a2bbf654921416bea6fc0f42",
+        ResourcePart(
+            "2017",
+            (
+                URLResource(
+                    url="https://figshare.com/ndownloader/files/43169005",
+                    filename="2017.zip",
+                    md5=True,
+                    checksum="9c2de230a2bbf654921416bea6fc0f42",
+                ),
+            ),
         ),
-        DataLocation(
-            url="https://figshare.com/ndownloader/files/43168999",
-            filename="2021.zip",
-            md5=True,
-            checksum="b84749b21fa95a4a4c7de3741db78bc7",
+        ResourcePart(
+            "2021",
+            (
+                URLResource(
+                    url="https://figshare.com/ndownloader/files/43168999",
+                    filename="2021.zip",
+                    md5=True,
+                    checksum="b84749b21fa95a4a4c7de3741db78bc7",
+                ),
+            ),
         ),
-        DataLocation(
-            url="https://figshare.com/ndownloader/files/43169008",
-            filename="2010.zip",
-            md5=True,
-            checksum="43347a0cc383c0d3dbe0d24ae56f328d",
+        ResourcePart(
+            "2010",
+            (
+                URLResource(
+                    url="https://figshare.com/ndownloader/files/43169008",
+                    filename="2010.zip",
+                    md5=True,
+                    checksum="43347a0cc383c0d3dbe0d24ae56f328d",
+                ),
+            ),
         ),
-        DataLocation(
-            url="https://figshare.com/ndownloader/files/43169011",
-            filename="2018.zip",
-            md5=True,
-            checksum="25d091044a10c78674fedad655023e3b",
+        ResourcePart(
+            "2018",
+            (
+                URLResource(
+                    url="https://figshare.com/ndownloader/files/43169011",
+                    filename="2018.zip",
+                    md5=True,
+                    checksum="25d091044a10c78674fedad655023e3b",
+                ),
+            ),
         ),
     ]
 
@@ -169,7 +194,7 @@ class MILCO(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str
 
     def _load_data_inner(self) -> tuple[list[str], list[str], dict[str, Any]]:
         file_data = {"year": [], "image_id": [], "data_path": [], "label_path": []}
-        data_folder = sorted((self.path / self._resource.filename[:-4]).glob("*.jpg"))
+        data_folder = sorted((self.path / self._resource.name).glob("*.jpg"))
         if not data_folder:
             raise FileNotFoundError
 
