@@ -1,11 +1,17 @@
 import hashlib
+import os
 from pathlib import Path
 
 import pytest
 import requests
+from huggingface_hub.utils.tqdm import are_progress_bars_disabled, disable_progress_bars, enable_progress_bars
 from requests import RequestException, Response
 
 from maite_datasets._fileio import (
+    HF_ATTEMPTS,
+    HF_DOWNLOAD_FLAGS,
+    HF_MAX_WORKERS_ANONYMOUS,
+    HF_MAX_WORKERS_AUTHENTICATED,
     HFResource,
     ResourcePart,
     URLResource,
@@ -15,12 +21,14 @@ from maite_datasets._fileio import (
     _extract_archive,
     _extract_tar_archive,
     _extract_zip_archive,
+    _hf_download_settings,
     _hf_extract,
     _is_kaggle,
     _part_filename,
     _remove_folder_nest,
     _session_setup,
     _validate_file,
+    hf_constants,
 )
 
 TEMP_MD5 = "d149274109b50d5147c09d6fc7e80c71"
@@ -113,6 +121,69 @@ class TestDownloadPart:
         with pytest.raises(FileNotFoundError):
             _download_part(self._part("a.zip", "b.zip"), tmp_path, tmp_path, download=False)
         assert tried == ["a.zip"]
+
+
+@pytest.mark.optional
+class TestHFDownloadSettings:
+    """Hub preferences apply only for the duration of a download, then get put back."""
+
+    @pytest.mark.parametrize("flag", HF_DOWNLOAD_FLAGS)
+    def test_sets_the_constant_the_hub_actually_reads(self, flag):
+        # The hub reads the env var into a constant as it imports, so at runtime the
+        # constant -- not os.environ -- is the switch that has any effect.
+        assert getattr(hf_constants, flag) is False
+        with _hf_download_settings():
+            assert getattr(hf_constants, flag) is True
+            assert os.environ[flag] == "1"
+        assert getattr(hf_constants, flag) is False
+
+    @pytest.mark.parametrize("flag", HF_DOWNLOAD_FLAGS)
+    def test_restores_an_absent_env_var_by_removing_it(self, monkeypatch, flag):
+        monkeypatch.delenv(flag, raising=False)
+        with _hf_download_settings():
+            pass
+        assert flag not in os.environ
+
+    @pytest.mark.parametrize("flag", HF_DOWNLOAD_FLAGS)
+    @pytest.mark.parametrize("preset", ["0", "1"])
+    def test_restores_a_callers_own_setting(self, monkeypatch, flag, preset):
+        monkeypatch.setenv(flag, preset)
+        monkeypatch.setattr(hf_constants, flag, preset == "1")
+        with _hf_download_settings():
+            assert getattr(hf_constants, flag) is True
+        assert os.environ[flag] == preset
+        assert getattr(hf_constants, flag) is (preset == "1")
+
+    def test_silences_progress_bars_and_restores_them(self):
+        """Progress bars need the public toggle: the hub binds that constant by value."""
+        assert are_progress_bars_disabled() is False
+        with _hf_download_settings():
+            assert are_progress_bars_disabled() is True
+        assert are_progress_bars_disabled() is False
+
+    def test_leaves_progress_bars_off_if_the_caller_had_them_off(self):
+        disable_progress_bars()
+        try:
+            with _hf_download_settings():
+                pass
+            assert are_progress_bars_disabled() is True
+        finally:
+            enable_progress_bars()
+
+    def test_restores_when_the_download_raises(self, monkeypatch):
+        for flag in HF_DOWNLOAD_FLAGS:
+            monkeypatch.delenv(flag, raising=False)
+        with pytest.raises(ConnectionError), _hf_download_settings():
+            raise ConnectionError("429")
+        for flag in HF_DOWNLOAD_FLAGS:
+            assert getattr(hf_constants, flag) is False
+            assert flag not in os.environ
+        assert are_progress_bars_disabled() is False
+
+    def test_is_a_no_op_without_huggingface_hub(self, monkeypatch):
+        monkeypatch.setattr("maite_datasets._fileio.hf_constants", None)
+        with _hf_download_settings():
+            pass
 
 
 @pytest.mark.optional
@@ -440,14 +511,19 @@ class TestRemoveFolderNest:
 class TestHFExtract:
     @pytest.fixture
     def hf_mock(self, monkeypatch):
-        """Patch in a fake hub, returning the record of files it was asked to download."""
-        downloaded = []
+        """Patch in a fake hub, returning the record of snapshot_download calls."""
+        calls = []
 
-        def fake_download(repo_id, filename, repo_type, local_dir):
-            downloaded.append(filename)
-            target = Path(local_dir) / filename
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text("data")
+        def fake_snapshot(repo_id, repo_type, local_dir, allow_patterns, max_workers):
+            calls.append(
+                {
+                    "repo_id": repo_id,
+                    "repo_type": repo_type,
+                    "local_dir": local_dir,
+                    "patterns": allow_patterns,
+                    "workers": max_workers,
+                }
+            )
 
         def make_api(filelist):
             class FakeApi:
@@ -455,29 +531,100 @@ class TestHFExtract:
                     return filelist
 
             monkeypatch.setattr("maite_datasets._fileio.HfApi", FakeApi)
-            monkeypatch.setattr("maite_datasets._fileio.hf_hub_download", fake_download)
-            return downloaded
+            monkeypatch.setattr("maite_datasets._fileio.snapshot_download", fake_snapshot)
+            monkeypatch.setattr("maite_datasets._fileio.get_token", lambda: None)
+            return calls
 
         return make_api
 
     @pytest.mark.parametrize(
-        "allow_patterns, expected",
+        "allow_patterns, expected_count",
         [
-            (None, ["train/a.png", "train/b.png", "val/c.png"]),
-            ("train/*", ["train/a.png", "train/b.png"]),
-            (["val/*", "train/a.png"], ["train/a.png", "val/c.png"]),
+            (None, 3),
+            ("train/*", 2),
+            (["val/*", "train/a.png"], 2),
         ],
     )
-    def test_hf_extract_pattern_selection(self, hf_mock, tmp_path, allow_patterns, expected):
-        downloaded = hf_mock(["train/a.png", "train/b.png", "val/c.png"])
-        _hf_extract("repo", "dataset", tmp_path, allow_patterns=allow_patterns)
-        assert downloaded == expected
+    def test_hf_extract_reports_the_count_the_hub_will_fetch(
+        self, capsys, hf_mock, tmp_path, allow_patterns, expected_count
+    ):
+        """The count comes from the hub's own matcher, so it cannot drift from the fetch."""
+        hf_mock(["train/a.png", "train/b.png", "val/c.png"])
+        _hf_extract("repo", "dataset", tmp_path, allow_patterns=allow_patterns, verbose=True)
+        assert f"Downloading {expected_count} files ..." in capsys.readouterr().out
 
-    def test_hf_extract_skips_existing_files(self, hf_mock, tmp_path):
-        downloaded = hf_mock(["a.png", "b.png"])
-        (tmp_path / "a.png").write_text("already here")
+    def test_hf_extract_delegates_the_transfer_to_snapshot_download(self, hf_mock, tmp_path):
+        """One parallel call, not one request per file."""
+        calls = hf_mock(["train/a.png", "train/b.png", "val/c.png"])
+        _hf_extract("repo", "dataset", tmp_path, allow_patterns="train/*")
+        assert calls == [
+            {
+                "repo_id": "repo",
+                "repo_type": "dataset",
+                "local_dir": tmp_path,
+                "patterns": "train/*",
+                "workers": HF_MAX_WORKERS_ANONYMOUS,
+            }
+        ]
+
+    @pytest.mark.parametrize(
+        "token, expected_workers",
+        [(None, HF_MAX_WORKERS_ANONYMOUS), ("hf_abc123", HF_MAX_WORKERS_AUTHENTICATED)],
+    )
+    def test_hf_extract_widens_only_when_authenticated(self, hf_mock, monkeypatch, tmp_path, token, expected_workers):
+        """Anonymous callers are rate-limited, and a 429 outlasts any backoff worth waiting."""
+        calls = hf_mock(["a.png"])
+        monkeypatch.setattr("maite_datasets._fileio.get_token", lambda: token)
         _hf_extract("repo", "dataset", tmp_path)
-        assert downloaded == ["b.png"]
+        assert calls[0]["workers"] == expected_workers
+
+    def test_hf_extract_points_anonymous_users_at_hf_token(self, capsys, hf_mock, tmp_path):
+        hf_mock([f"{i}.png" for i in range(501)])
+        _hf_extract("repo", "dataset", tmp_path, verbose=True)
+        assert "Set HF_TOKEN" in capsys.readouterr().out
+
+    def test_hf_extract_resumes_after_a_rate_limit(self, capsys, monkeypatch, tmp_path):
+        """A 429 surfaces as a bare ConnectionError; each retry resumes from disk."""
+        monkeypatch.setattr("maite_datasets._fileio.time.sleep", lambda _: None)
+        attempts = []
+
+        def flaky_snapshot(**kwargs):
+            attempts.append(1)
+            if len(attempts) < 3:
+                raise ConnectionError("Network error: HTTP status client error (429 Too Many Requests)")
+
+        class FakeApi:
+            def list_repo_files(self, repo_id, repo_type):
+                return ["a.png"]
+
+        monkeypatch.setattr("maite_datasets._fileio.HfApi", FakeApi)
+        monkeypatch.setattr("maite_datasets._fileio.snapshot_download", flaky_snapshot)
+        monkeypatch.setattr("maite_datasets._fileio.get_token", lambda: None)
+        _hf_extract("repo", "dataset", tmp_path, verbose=True)
+        assert len(attempts) == 3
+        assert "429 Too Many Requests" in capsys.readouterr().out
+
+    def test_hf_extract_gives_up_after_the_last_attempt(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("maite_datasets._fileio.time.sleep", lambda _: None)
+        attempts = []
+
+        def always_fails(**kwargs):
+            attempts.append(1)
+            raise ConnectionError("429 Too Many Requests")
+
+        class FakeApi:
+            def list_repo_files(self, repo_id, repo_type):
+                return ["a.png"]
+
+        monkeypatch.setattr("maite_datasets._fileio.HfApi", FakeApi)
+        monkeypatch.setattr("maite_datasets._fileio.snapshot_download", always_fails)
+        monkeypatch.setattr("maite_datasets._fileio.get_token", lambda: None)
+        with pytest.raises(RuntimeError, match="re-running resumes") as e:
+            _hf_extract("repo", "dataset", tmp_path)
+        assert len(attempts) == HF_ATTEMPTS
+        # The hub's own error is preserved as the cause rather than swallowed.
+        assert isinstance(e.value.__cause__, ConnectionError)
+        assert "HF_TOKEN" in str(e.value)
 
     def test_hf_extract_warns_on_large_download(self, capsys, hf_mock, tmp_path):
         hf_mock([f"{i}.png" for i in range(501)])

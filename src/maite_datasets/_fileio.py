@@ -3,11 +3,15 @@ from __future__ import annotations
 __all__ = []
 
 import hashlib
+import os
 import re
 import shutil
 import tarfile
+import time
 import zipfile
-from fnmatch import fnmatch
+from collections.abc import Generator
+from contextlib import contextmanager
+from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import Literal, NamedTuple, TypeAlias
 from urllib.parse import urlparse
@@ -20,17 +24,35 @@ except ImportError:
     tqdm = None
 
 try:
-    import os
+    from huggingface_hub import HfApi, get_token, snapshot_download
+    from huggingface_hub import constants as hf_constants
 
-    os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
-    os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
-    from huggingface_hub import HfApi, hf_hub_download
+    # Documented public toggles, but imported from the defining submodule because the
+    # utils package does not re-export them in ``__all__``.
+    from huggingface_hub.utils.tqdm import (
+        are_progress_bars_disabled,
+        disable_progress_bars,
+        enable_progress_bars,
+    )
 except ImportError:
     HfApi = None
-    hf_hub_download = None
+    snapshot_download = None
+    get_token = None
+    hf_constants = None
+    are_progress_bars_disabled = disable_progress_bars = enable_progress_bars = None
 
 ARCHIVE_ENDINGS = [".zip", ".tar", ".tgz"]
 COMPRESS_ENDINGS = [".gz", ".bz2"]
+
+# A huggingface repo of loose image files is one request per image, so width decides
+# how long a few thousand images take. What it is safe to ask for depends entirely on
+# authentication: with a token the hub's default concurrency is fine, without one even
+# four workers earns a 429 partway through, and the throttle that follows outlasts any
+# backoff worth waiting for. So stay serial when anonymous -- slower, but it finishes.
+HF_MAX_WORKERS_ANONYMOUS = 1
+HF_MAX_WORKERS_AUTHENTICATED = 8
+HF_ATTEMPTS = 5
+HF_RETRY_BACKOFF = 5.0
 
 
 class URLResource(NamedTuple):
@@ -278,6 +300,62 @@ def _ensure_exists(
             _extract_archive(file_ext, check_path, directory, compression, verbose)
 
 
+# Hub flags this package overrides while downloading, each read as a live attribute of
+# huggingface_hub.constants and so settable at runtime.
+#   HF_HUB_DISABLE_XET       -- xet's chunk-level dedup pays off on large files but costs
+#                               a token negotiation per file, and these repos are
+#                               thousands of small images: it measured roughly five times
+#                               slower and multiplied requests enough to draw 429s.
+#   HF_HUB_DISABLE_TELEMETRY -- fetching a dataset should not phone home for the caller.
+# Progress bars are handled separately: the hub binds that constant by value at import
+# (``from ..constants import ...``), so only its public toggle has any effect.
+HF_DOWNLOAD_FLAGS = ("HF_HUB_DISABLE_XET", "HF_HUB_DISABLE_TELEMETRY")
+
+
+@contextmanager
+def _hf_download_settings() -> Generator[None, None, None]:
+    """Apply this package's huggingface preferences for one download, then undo them.
+
+    Scoped to the call rather than set at import on purpose. Importing this package
+    should not quietly change huggingface's behaviour for unrelated code in the same
+    process, and the env-var-at-import approach it replaces was a silent no-op whenever
+    the caller happened to import ``huggingface_hub`` first -- the hub reads each env var
+    into a constant as it is imported, so a later write to ``os.environ`` arrives too
+    late. Setting the constants is what actually takes effect; the env vars are set
+    alongside them only so subprocesses agree. Everything is restored on the way out.
+    """
+    if (
+        hf_constants is None
+        or are_progress_bars_disabled is None
+        or disable_progress_bars is None
+        or enable_progress_bars is None
+    ):
+        yield
+        return
+
+    previous_flags = {name: getattr(hf_constants, name) for name in HF_DOWNLOAD_FLAGS}
+    previous_env = {name: os.environ.get(name) for name in HF_DOWNLOAD_FLAGS}
+    previously_quiet = are_progress_bars_disabled()
+
+    for name in HF_DOWNLOAD_FLAGS:
+        setattr(hf_constants, name, True)
+        os.environ[name] = "1"
+    # This module prints its own file count, so the hub's bars are redundant noise.
+    disable_progress_bars()
+    try:
+        yield
+    finally:
+        for name, flag in previous_flags.items():
+            setattr(hf_constants, name, flag)
+            prior = previous_env[name]
+            if prior is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = prior
+        if not previously_quiet:
+            enable_progress_bars()
+
+
 def _part_filename(part: ResourcePart) -> str:
     """Archive filename of `part`'s primary mirror, for loaders that re-open the file.
 
@@ -352,9 +430,11 @@ def _hf_extract(
     """Downloads dataset from Huggingface to local_dir.
 
     ``allow_patterns`` are shell-style globs matched against the repo-relative file
-    paths (``fnmatch``, so ``*`` also spans ``/``); None selects every file.
+    paths (so ``*`` also spans ``/``); None selects every file. The listing here exists
+    only to report the count, and uses ``fnmatchcase`` to match how the hub filters the
+    same patterns, so the number reported is the number fetched.
     """
-    if HfApi is None or hf_hub_download is None:
+    if HfApi is None or snapshot_download is None or get_token is None:
         raise ImportError(
             "huggingface-hub is a required library to download from huggingface. "
             "Either download maite-datasets[hf-hub] or pip install huggingface-hub."
@@ -363,20 +443,52 @@ def _hf_extract(
     api = HfApi()
     filelist = api.list_repo_files(repo_id=repo_id, repo_type=repo_type)
 
-    if allow_patterns is None:
-        selected_files = list(filelist)
-    else:
-        patterns = [allow_patterns] if isinstance(allow_patterns, str) else list(allow_patterns)
-        selected_files = [f for f in filelist if any(fnmatch(f, pattern) for pattern in patterns)]
-    num_files = len(selected_files)
+    patterns = [allow_patterns] if isinstance(allow_patterns, str) else allow_patterns
+    num_files = (
+        len(filelist)
+        if patterns is None
+        else sum(1 for f in filelist if any(fnmatchcase(f, pattern) for pattern in patterns))
+    )
     extra = ". This may take a while ..." if num_files > 500 else " ..."
     _print(f"Downloading {num_files} files{extra}", verbose)
 
-    for filename in selected_files:
-        if not (local_dir / filename).exists():
-            hf_hub_download(
-                repo_id=repo_id,
-                filename=filename,
-                repo_type=repo_type,
-                local_dir=local_dir,
-            )
+    authenticated = get_token() is not None
+    if not authenticated and num_files > 500:
+        _print(
+            "No huggingface token found, so files are fetched one at a time to stay under "
+            "the anonymous rate limit. Set HF_TOKEN (or run `huggingface-cli login`) to "
+            "download in parallel.",
+            verbose,
+        )
+
+    # Every attempt resumes from what is already on disk, so a dropped transfer costs
+    # only the backoff. The retries catch OSError, which covers both the bare
+    # ConnectionError the xet transfer layer raises on a 429 and HfHubHTTPError (a
+    # requests.RequestException, and so an OSError too).
+    for attempt in range(HF_ATTEMPTS):
+        try:
+            with _hf_download_settings():
+                snapshot_download(
+                    repo_id=repo_id,
+                    repo_type=repo_type,
+                    local_dir=local_dir,
+                    allow_patterns=allow_patterns,
+                    max_workers=HF_MAX_WORKERS_AUTHENTICATED if authenticated else HF_MAX_WORKERS_ANONYMOUS,
+                )
+            return
+        except OSError as e:
+            if attempt == HF_ATTEMPTS - 1:
+                # The anonymous quota is a request count per window, not a concurrency
+                # limit, so a repo of this many files can exhaust it at any width and the
+                # window outlasts any backoff worth blocking on. Partial progress is kept,
+                # so say so -- re-running picks up from here rather than starting over.
+                raise RuntimeError(
+                    f"Could not finish downloading {repo_id} from huggingface after "
+                    f"{HF_ATTEMPTS} attempts: {e}\n"
+                    f"Files already fetched are kept in {local_dir}, so re-running resumes "
+                    "from there. If this is a rate limit, set HF_TOKEN (or run "
+                    "`huggingface-cli login`) for a higher quota."
+                ) from e
+            delay = HF_RETRY_BACKOFF * 2**attempt
+            _print(f"Download interrupted ({e}); resuming in {delay:.0f}s ...", verbose)
+            time.sleep(delay)
