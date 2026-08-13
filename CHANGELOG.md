@@ -1,5 +1,9 @@
 # Changelog for maite-datasets
 
+## v0.0.18
+
+- [fix] Ensure Seadrone image ordering is deterministic
+
 ## v0.0.17
 
 - [fix] Fix Kaggle downloads
