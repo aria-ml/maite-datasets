@@ -564,11 +564,11 @@ class SeaDrone(
         return filepaths, list(targets), datum_metadata
 
     def _load_images(self, data_folder: Path, file_data: dict[int, dict[str, Any]]) -> dict[int, dict[str, Any]]:
-        for entry in data_folder.iterdir():
-            if entry.is_file() and entry.suffix == ".jpg":
-                if int(entry.stem) not in file_data:
-                    file_data[int(entry.stem)] = {}
-                file_data[int(entry.stem)]["data_path"] = str(entry)
+        entries = [entry for entry in data_folder.iterdir() if entry.is_file() and entry.suffix == ".jpg"]
+        for entry in sorted(entries, key=lambda x: int(x.stem)):
+            if int(entry.stem) not in file_data:
+                file_data[int(entry.stem)] = {}
+            file_data[int(entry.stem)]["data_path"] = str(entry)
 
         return file_data
 
@@ -691,6 +691,9 @@ class SeaDrone(
                     json_name += "_nogt"
                 annotation_file = self.path / "annotations" / f"instances_{json_name}.json"
                 file_data = self._create_per_image_annotations(annotation_file, file_data)
+
+        # Sort file_data by integer keys to ensure absolute numerical order globally
+        file_data = {k: file_data[k] for k in sorted(file_data.keys())}
 
         meta_data = self._restructure_file_data(file_data)
         data = meta_data.pop("data_path")

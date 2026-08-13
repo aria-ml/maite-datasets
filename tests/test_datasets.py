@@ -323,10 +323,13 @@ class TestSeaDrone:
             assert dataset.label2index != {}
             assert "id" in dataset.metadata
             assert len(dataset) == 5
+            image_ids = []
             for i in range(5):
                 img, target, datum_meta = dataset[i]
                 assert img.shape == (3, 10, 10)
                 assert isinstance(target, ObjectDetectionTarget)
+                image_ids.append(datum_meta["image_id"])
+            assert image_ids == [0, 4, 8, 12, 16]
 
     def test_seadrone_base(self, seadrone_fake):
         "Test SeaDrone dataset initialization"
@@ -337,7 +340,10 @@ class TestSeaDrone:
             assert dataset.label2index != {}
             assert "id" in dataset.metadata
             assert len(dataset) == 10
+            image_ids = []
             for i in range(10):
                 img, target, datum_meta = dataset[i]
                 assert img.shape == (3, 10, 10)
                 assert isinstance(target, ObjectDetectionTarget)
+                image_ids.append(datum_meta["image_id"])
+            assert image_ids == [0, 4, 7, 8, 12, 14, 16, 21, 27, 36]
