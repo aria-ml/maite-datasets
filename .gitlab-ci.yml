@@ -1,6 +1,5 @@
 variables:
   PYTHON_LATEST_SUPPORTED_VERSION: '3.13'
-  SAST_EXCLUDED_PATHS: spec,test,tests,tmp,.nox,output
   UV_CACHE_DIR: .uv-cache
   UV_LINK_MODE: symlink
   UV_IMAGE: ghcr.io/astral-sh/uv
@@ -44,18 +43,6 @@ stages:
       when: never
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
-
-# Security scan timing is policy, not a per-repo choice: scans run on merge requests and
-# on protected refs. The group-level security policy for jatic/aria also scans default
-# and protected branches into the same Vulnerability Report, so there is deliberate
-# overlap -- the in-pipeline run is what gives per-commit feedback on the branch itself.
-#
-# Note CI_COMMIT_REF_PROTECTED is also true on the default branch when it is protected.
-# Any other pipeline simply fails to match, so no `when: never` clauses are needed.
-.rules_security:
-  rules: &rules_security
-    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
-    - if: $CI_COMMIT_REF_PROTECTED == "true"
 
 ### TEMPLATES ###
 
@@ -152,25 +139,13 @@ coverage:
 ### SECURITY ###
 
 include:
-  - template: Security/Secret-Detection.gitlab-ci.yml
-  - template: Security/Dependency-Scanning.gitlab-ci.yml
-  - template: Security/SAST.gitlab-ci.yml
+  - component: gitlab.jatic.net/jatic/aria/ci-components/python-security@0.2.0
+    inputs:
+      stage: security
+      sast_excluded_paths: "spec,test,tests,tmp,.nox,output"
+      ds_excluded_paths: "spec,test,tests,tmp,.nox,output"
 
-# NOTE: Security template jobs use `extends:` internally -- do not override with
-# `extends:` here or the template's analyzer inheritance chain breaks. Rules go in by
-# anchor instead.
+# Scan jobs, their timing policy and the analyzer overrides all live in the
+# component above. Nothing security-related is configured here beyond the
+# exclusion paths, which are genuinely project-specific.
 
-secret_detection:
-  stage: security
-  needs: []
-  rules: *rules_security
-
-gemnasium-python-dependency_scanning:
-  stage: security
-  needs: []
-  rules: *rules_security
-
-semgrep-sast:
-  stage: security
-  needs: []
-  rules: *rules_security
