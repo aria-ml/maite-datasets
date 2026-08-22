@@ -25,34 +25,55 @@ image: $UV_IMAGE:python$PYTHON_LATEST_SUPPORTED_VERSION-$UV_BASE_LAYER
 
 stages:
   - test
+  - publish
   - security
 
-### RULE ANCHORS ###
+### RULE TEMPLATES ###
+#
+# Named templates rather than bare anchors, matching the vocabulary the shared
+# ci-components rules will use: $CI_DEFAULT_BRANCH instead of a literal 'main', and a
+# release-trigger opt-out that becomes a component input.
+#
+# The anchors alongside them exist because the GitLab security templates use `extends:`
+# internally -- overriding that breaks the analyzer inheritance chain -- so those jobs
+# take their rules by anchor instead.
 
-.exclude_main: &exclude_main
-  if: $CI_COMMIT_BRANCH == 'main'
-  when: never
+.rules_main_mr:
+  rules: &rules_main_mr
+    - if: $CREATE_NEW_RELEASE
+      when: never
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
 
-.exclude_release: &exclude_release
-  if: $CREATE_NEW_RELEASE
-  when: never
-
-.run: &run
-  if: $CI_PIPELINE_SOURCE == 'merge_request_event' || $CI_COMMIT_BRANCH == 'main'
+# Security scan timing is policy, not a per-repo choice: scans run on merge requests and
+# on protected refs. The group-level security policy for jatic/aria also scans default
+# and protected branches into the same Vulnerability Report, so there is deliberate
+# overlap -- the in-pipeline run is what gives per-commit feedback on the branch itself.
+#
+# Note CI_COMMIT_REF_PROTECTED is also true on the default branch when it is protected.
+# Any other pipeline simply fails to match, so no `when: never` clauses are needed.
+.rules_security:
+  rules: &rules_security
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    - if: $CI_COMMIT_REF_PROTECTED == "true"
 
 ### TEMPLATES ###
 
 .nox:
   needs: []
   image: $UV_IMAGE:python$PYTHON_VERSION-$UV_BASE_LAYER
-  before_script:
-    - uv pip install nox nox-uv --system
   cache:
+    # uv cache, invalidated by the lockfile.
     - key:
         files:
           - uv.lock
       paths:
         - $UV_CACHE_DIR
+    # Downloaded datasets, keyed separately from the uv cache. Sharing the uv.lock key
+    # meant a lockfile bump wiped every dataset, while a change to which datasets are
+    # needed never invalidated them.
+    - key: datasets
+      paths:
         - data
   after_script:
     - uv cache prune --ci
@@ -69,58 +90,64 @@ stages:
 ### TEST ###
 
 lint:
-  extends: .nox
+  extends: [.nox, .rules_main_mr]
   script:
-    - nox -e lint
-  rules: 
-    - *exclude_release
-    - *run
+    - uvx --with nox-uv nox -s lint
 
 typecheck:
-  extends: .nox_all
+  extends: [.nox_all, .rules_main_mr]
   script:
-    - nox -e type
-  rules:
-    - *exclude_release
-    - *run
+    # -P pins the interpreter to the matrix leg. The old `uv pip install nox --system`
+    # guaranteed the image's python; uvx resolves its own, so without -P every leg could
+    # typecheck the same version and the matrix would stop meaning anything.
+    - uvx --with nox-uv nox -P $PYTHON_VERSION -s type
 
 test:
-  extends: .nox_all
+  extends: [.nox_all, .rules_main_mr]
   script:
-    - apt-get update && apt-get install -y libgl1
-    - nox -P $PYTHON_VERSION -e test
+    # -P pins the interpreter so nox names the session `test-<version>`; the noxfile reads
+    # that name to suffix its artifacts. Without it the suffix falls back to whichever
+    # interpreter uvx happened to run nox under.
+    - uvx --with nox-uv nox -P $PYTHON_VERSION -s test
   artifacts:
+    # always: a failed run still publishes the JUnit report showing which test failed.
+    when: always
+    # Directory form, NOT `output/*` -- a glob drops the dotted coverage data files
+    # (output/.coverage.3.11) that the `coverage` job needs to combine.
+    paths:
+      - output/
     reports:
       junit: output/junit.*.xml
-    paths:
-      - output/*
-  rules: 
-    - *exclude_release
-    - *run
+
+### PUBLISH ###
 
 coverage:
+  extends: .rules_main_mr
+  stage: publish
   needs: [test]
   before_script:
     - uv pip install coverage --system
   script:
-    - cp --recursive $(pwd) /maite-datasets
     - coverage combine ./output
+    # Reports BEFORE the gate. Every coverage subcommand honours [tool.coverage.report]
+    # fail_under and exits 2 when it is not met, so gating first would skip report
+    # generation exactly when the report matters most. --fail-under=0 keeps these steps
+    # about writing files.
+    - coverage xml --skip-empty --fail-under=0 -o coverage.xml
+    - coverage html --skip-empty --fail-under=0 -d htmlcov
+    # The gate, on the union of all matrix runs.
     - coverage report -m --skip-empty --precision=2
-    - coverage xml --skip-empty
-    - coverage html --skip-empty
-    - mv htmlcov/ ./public/
-  coverage: "/(?i)total.*? (100(?:\\.0+)?\\%|[1-9]?\\d(?:\\.\\d+)?\\%)$/"
+  coverage: '/(?i)total.*? (100(?:\.0+)?%|[1-9]?\d(?:\.\d+)?%)$/'
   artifacts:
+    # always: a failed gate still publishes the report showing what is uncovered.
+    when: always
     reports:
       coverage_report:
         coverage_format: cobertura
         path: coverage.xml
     paths:
       - coverage.xml
-      - public/
-  rules:
-    - *exclude_release
-    - *run
+      - htmlcov/
 
 ### SECURITY ###
 
@@ -129,26 +156,21 @@ include:
   - template: Security/Dependency-Scanning.gitlab-ci.yml
   - template: Security/SAST.gitlab-ci.yml
 
+# NOTE: Security template jobs use `extends:` internally -- do not override with
+# `extends:` here or the template's analyzer inheritance chain breaks. Rules go in by
+# anchor instead.
+
 secret_detection:
   stage: security
   needs: []
-  rules:
-    - *exclude_main
-    - *exclude_release
-    - *run
+  rules: *rules_security
 
 gemnasium-python-dependency_scanning:
   stage: security
   needs: []
-  rules:
-    - *exclude_main
-    - *exclude_release
-    - *run
+  rules: *rules_security
 
 semgrep-sast:
   stage: security
   needs: []
-  rules:
-    - *exclude_main
-    - *exclude_release
-    - *run
+  rules: *rules_security

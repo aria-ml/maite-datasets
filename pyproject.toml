@@ -110,6 +110,13 @@ markers = [
 source = ["src/maite_datasets"]
 branch = true
 
+# Remap coverage data recorded under any checkout root (CI runner, container, local
+# clone) onto this tree, so `coverage combine` resolves files no matter where each
+# matrix leg ran. Replaces a `cp --recursive $(pwd) /maite-datasets` step that
+# used to sit in the CI coverage job.
+[tool.coverage.paths]
+source = ["src/maite_datasets", "*/src/maite_datasets"]
+
 [tool.coverage.report]
 exclude_also = [
   "raise NotImplementedError",
