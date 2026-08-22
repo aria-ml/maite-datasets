@@ -1,26 +1,9 @@
 variables:
   PYTHON_LATEST_SUPPORTED_VERSION: '3.13'
-  UV_CACHE_DIR: .uv-cache
   UV_LINK_MODE: symlink
   UV_IMAGE: ghcr.io/astral-sh/uv
   UV_BASE_LAYER: bookworm
   FORCE_COLOR: '1'
-
-workflow:
-  # Allows jobs in this workflow to be interrupted:
-  # https://gitlab.jatic.net/help/ci/yaml/index.md#workflowauto_cancelon_new_commit
-  auto_cancel:
-    on_new_commit: interruptible
-
-default:
-  # This should allow pipelines to auto-cancel when redundant:
-  # https://gitlab.jatic.net/help/ci/pipelines/settings.md#auto-cancel-redundant-pipelines
-  # https://gitlab.jatic.net/help/ci/yaml/index.md#interruptible
-  interruptible: true
-  tags:
-    - autoscaler
-
-image: $UV_IMAGE:python$PYTHON_LATEST_SUPPORTED_VERSION-$UV_BASE_LAYER
 
 stages:
   - test
@@ -33,14 +16,18 @@ stages:
 # jatic/aria/ci-components. Only genuinely project-specific values are passed in.
 
 include:
-  - component: gitlab.jatic.net/jatic/aria/ci-components/uv-nox@0.4.0
+  - component: gitlab.jatic.net/jatic/aria/ci-components/workflow-rules@0.6.0
+    inputs:
+      runner_tags: ["autoscaler"]
+
+  - component: gitlab.jatic.net/jatic/aria/ci-components/uv-nox@0.6.0
     inputs:
       job_name: lint
       session: lint
       stage: test
       image: $UV_IMAGE:python$PYTHON_LATEST_SUPPORTED_VERSION-$UV_BASE_LAYER
 
-  - component: gitlab.jatic.net/jatic/aria/ci-components/python-matrix@0.4.0
+  - component: gitlab.jatic.net/jatic/aria/ci-components/python-matrix@0.6.0
     inputs:
       job_name: typecheck
       session: type
@@ -48,7 +35,7 @@ include:
       python_versions: ["3.10", "3.11", "3.12", "3.13"]
       image: $UV_IMAGE:python$PYTHON_VERSION-$UV_BASE_LAYER
 
-  - component: gitlab.jatic.net/jatic/aria/ci-components/python-matrix@0.4.0
+  - component: gitlab.jatic.net/jatic/aria/ci-components/python-matrix@0.6.0
     inputs:
       job_name: test
       session: test
@@ -61,13 +48,13 @@ include:
       artifact_paths: ["output/"]
       junit_report: output/junit.*.xml
 
-  - component: gitlab.jatic.net/jatic/aria/ci-components/python-security@0.5.0
+  - component: gitlab.jatic.net/jatic/aria/ci-components/python-security@0.6.0
     inputs:
       stage: security
       sast_excluded_paths: "spec,test,tests,tmp,.nox,output"
       ds_excluded_paths: "spec,test,tests,tmp,.nox,output"
 
-  - component: gitlab.jatic.net/jatic/aria/ci-components/coverage@0.3.0
+  - component: gitlab.jatic.net/jatic/aria/ci-components/coverage@0.6.0
     inputs:
       stage: publish
       needs_job: test
