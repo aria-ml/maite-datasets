@@ -16,10 +16,9 @@ from maite.protocols import DatasetMetadata, DatumMetadata
 from maite.protocols import image_classification as ic
 from maite.protocols import object_detection as od
 from numpy.typing import ArrayLike, NDArray
-from PIL import Image
 
 from maite_datasets._fileio import ResourcePart, _download_part, _print
-from maite_datasets._lazy import TIFF_EXTENSIONS, LazyArray, chw_loaders, tiff_chw_load, tiff_chw_shape
+from maite_datasets._lazy import LazyArray, chw_loaders
 from maite_datasets.protocols import Array
 
 _T_co = TypeVar("_T_co", covariant=True)
@@ -447,10 +446,8 @@ class BaseDatasetNumpyMixin(BaseDatasetMixin[NumpyArray]):
         return encoded
 
     def _read_file(self, path: str) -> NumpyArray:
-        ext = Path(path).suffix.lower()
-        if ext in TIFF_EXTENSIONS:
-            return tiff_chw_load(path)
-        return np.array(Image.open(path)).transpose(2, 0, 1)
+        loader, _ = chw_loaders(path)
+        return loader(path)
 
     def _read_shape(self, path: str) -> tuple[int, ...]:
         """Read (C, H, W) without decoding pixel data.
@@ -460,17 +457,11 @@ class BaseDatasetNumpyMixin(BaseDatasetMixin[NumpyArray]):
         datasets like MNIST/CIFAR), or when TIFF axis metadata can't be
         interpreted cheaply.
         """
-        ext = Path(path).suffix.lower()
+        _, shape_loader = chw_loaders(path)
         try:
-            if ext in TIFF_EXTENSIONS:
-                channels, h, w = tiff_chw_shape(path)
-            else:
-                with Image.open(path) as im:
-                    channels = len(im.getbands())
-                    w, h = im.size
+            return tuple(shape_loader(path))
         except (FileNotFoundError, OSError, ValueError, tif.TiffFileError):
             return self._read_file(path).shape
-        return (channels, h, w)
 
 
 NumpyImageTransform: TypeAlias = ImageTransform[NumpyArray]

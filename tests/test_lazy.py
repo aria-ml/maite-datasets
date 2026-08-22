@@ -5,6 +5,7 @@ import pytest
 import tifffile as tif
 from PIL import Image
 
+from maite_datasets._base import BaseDatasetNumpyMixin
 from maite_datasets._lazy import LazyArray, chw_loaders, tiff_chw_load, tiff_chw_shape
 from maite_datasets.protocols import Array
 
@@ -206,3 +207,42 @@ class TestTiffLoaders:
         lazy = LazyArray(str(rgb_tiff), loader=loader, shape_loader=shape_loader)
         assert lazy.shape == (3, 6, 8)
         assert np.asarray(lazy).shape == (3, 6, 8)
+
+
+@pytest.fixture
+def palette_png(tmp_path):
+    """A palettized ("P" mode) image -- what a PNG/JPEG with an indexed palette decodes to."""
+    path = tmp_path / "palette.png"
+    Image.fromarray(np.arange(6 * 8 * 3, dtype=np.uint8).reshape(6, 8, 3)).convert("P").save(path)
+    return path
+
+
+@pytest.fixture
+def gray_png(tmp_path):
+    path = tmp_path / "gray.png"
+    Image.fromarray(np.arange(6 * 8, dtype=np.uint8).reshape(6, 8), mode="L").save(path)
+    return path
+
+
+class TestNonRgbModesDecodeAsRgb:
+    """Non-RGB images must still come back as (3, H, W), eagerly and lazily alike.
+
+    A palettized or grayscale file decodes to a 2-D array, so any decoder that assumes
+    three channels raises "axes don't match array" on it.
+    """
+
+    @pytest.mark.parametrize("fixture", ["palette_png", "gray_png", "rgb_png"])
+    def test_loader_and_shape_agree_on_three_channels(self, request, fixture):
+        path = request.getfixturevalue(fixture)
+        loader, shape_loader = chw_loaders(path)
+        arr = loader(path)
+        assert arr.shape[0] == 3
+        assert tuple(shape_loader(path)) == arr.shape
+
+    @pytest.mark.parametrize("fixture", ["palette_png", "gray_png"])
+    def test_numpy_mixin_routes_through_the_shared_decoder(self, request, fixture):
+        """The eager mixin and the lazy path must not drift apart on the same file."""
+        path = str(request.getfixturevalue(fixture))
+        mixin = BaseDatasetNumpyMixin()
+        assert mixin._read_file(path).shape[0] == 3
+        assert mixin._read_shape(path) == mixin._read_file(path).shape
