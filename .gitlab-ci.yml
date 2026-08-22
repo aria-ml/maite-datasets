@@ -27,91 +27,40 @@ stages:
   - publish
   - security
 
-### RULE TEMPLATES ###
-#
-# Named templates rather than bare anchors, matching the vocabulary the shared
-# ci-components rules will use: $CI_DEFAULT_BRANCH instead of a literal 'main', and a
-# release-trigger opt-out that becomes a component input.
-#
-# The anchors alongside them exist because the GitLab security templates use `extends:`
-# internally -- overriding that breaks the analyzer inheritance chain -- so those jobs
-# take their rules by anchor instead.
-
-.rules_main_mr:
-  rules: &rules_main_mr
-    - if: $CREATE_NEW_RELEASE
-      when: never
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
-
-### TEMPLATES ###
-
-.nox:
-  needs: []
-  image: $UV_IMAGE:python$PYTHON_VERSION-$UV_BASE_LAYER
-  cache:
-    # uv cache, invalidated by the lockfile.
-    - key:
-        files:
-          - uv.lock
-      paths:
-        - $UV_CACHE_DIR
-    # Downloaded datasets, keyed separately from the uv cache. Sharing the uv.lock key
-    # meant a lockfile bump wiped every dataset, while a change to which datasets are
-    # needed never invalidated them.
-    - key: datasets
-      paths:
-        - data
-  after_script:
-    - uv cache prune --ci
-  variables:
-    PYTHON_VERSION: $PYTHON_LATEST_SUPPORTED_VERSION
-
-.nox_all:
-  extends: .nox
-  image: $UV_IMAGE:python$PYTHON_VERSION-$UV_BASE_LAYER
-  parallel:
-    matrix:
-      - PYTHON_VERSION: ["3.10", "3.11", "3.12", "3.13"]
-
-### TEST ###
-
-lint:
-  extends: [.nox, .rules_main_mr]
-  script:
-    - uvx --with nox-uv nox -s lint
-
-typecheck:
-  extends: [.nox_all, .rules_main_mr]
-  script:
-    # -P pins the interpreter to the matrix leg. The old `uv pip install nox --system`
-    # guaranteed the image's python; uvx resolves its own, so without -P every leg could
-    # typecheck the same version and the matrix would stop meaning anything.
-    - uvx --with nox-uv nox -P $PYTHON_VERSION -s type
-
-test:
-  extends: [.nox_all, .rules_main_mr]
-  script:
-    # -P pins the interpreter so nox names the session `test-<version>`; the noxfile reads
-    # that name to suffix its artifacts. Without it the suffix falls back to whichever
-    # interpreter uvx happened to run nox under.
-    - uvx --with nox-uv nox -P $PYTHON_VERSION -s test
-  artifacts:
-    # always: a failed run still publishes the JUnit report showing which test failed.
-    when: always
-    # Directory form, NOT `output/*` -- a glob drops the dotted coverage data files
-    # (output/.coverage.3.11) that the `coverage` job needs to combine.
-    paths:
-      - output/
-    reports:
-      junit: output/junit.*.xml
-
 ### SHARED COMPONENTS ###
 #
 # Pipeline behaviour shared with the other ARIA projects lives in
 # jatic/aria/ci-components. Only genuinely project-specific values are passed in.
 
 include:
+  - component: gitlab.jatic.net/jatic/aria/ci-components/uv-nox@0.4.0
+    inputs:
+      job_name: lint
+      session: lint
+      stage: test
+      image: $UV_IMAGE:python$PYTHON_LATEST_SUPPORTED_VERSION-$UV_BASE_LAYER
+
+  - component: gitlab.jatic.net/jatic/aria/ci-components/python-matrix@0.4.0
+    inputs:
+      job_name: typecheck
+      session: type
+      stage: test
+      python_versions: ["3.10", "3.11", "3.12", "3.13"]
+      image: $UV_IMAGE:python$PYTHON_VERSION-$UV_BASE_LAYER
+
+  - component: gitlab.jatic.net/jatic/aria/ci-components/python-matrix@0.4.0
+    inputs:
+      job_name: test
+      session: test
+      stage: test
+      python_versions: ["3.10", "3.11", "3.12", "3.13"]
+      image: $UV_IMAGE:python$PYTHON_VERSION-$UV_BASE_LAYER
+      # Datasets the suite downloads, keyed apart from the uv cache.
+      extra_cache_key: datasets
+      extra_cache_paths: ["data"]
+      artifact_paths: ["output/"]
+      junit_report: output/junit.*.xml
+
   - component: gitlab.jatic.net/jatic/aria/ci-components/python-security@0.2.0
     inputs:
       stage: security
@@ -124,8 +73,3 @@ include:
       needs_job: test
       python_image: $UV_IMAGE:python$PYTHON_LATEST_SUPPORTED_VERSION-$UV_BASE_LAYER
       # 93.5%: above the 90% group guideline, so the gate blocks.
-
-# Scan jobs, their timing policy and the analyzer overrides all live in the
-# component above. Nothing security-related is configured here beyond the
-# exclusion paths, which are genuinely project-specific.
-
