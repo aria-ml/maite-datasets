@@ -1,5 +1,11 @@
 # Changelog for maite-datasets
 
+## v0.0.19
+
+- [fix] Decode palettized and grayscale images as RGB
+- [fix] Download MILCO from figshare API host
+- [misc] Switch to shared CI components
+
 ## v0.0.18
 
 - [fix] Ensure Seadrone image ordering is deterministic
