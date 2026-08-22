@@ -106,37 +106,10 @@ test:
     reports:
       junit: output/junit.*.xml
 
-### PUBLISH ###
-
-coverage:
-  extends: .rules_main_mr
-  stage: publish
-  needs: [test]
-  before_script:
-    - uv pip install coverage --system
-  script:
-    - coverage combine ./output
-    # Reports BEFORE the gate. Every coverage subcommand honours [tool.coverage.report]
-    # fail_under and exits 2 when it is not met, so gating first would skip report
-    # generation exactly when the report matters most. --fail-under=0 keeps these steps
-    # about writing files.
-    - coverage xml --skip-empty --fail-under=0 -o coverage.xml
-    - coverage html --skip-empty --fail-under=0 -d htmlcov
-    # The gate, on the union of all matrix runs.
-    - coverage report -m --skip-empty --precision=2
-  coverage: '/(?i)total.*? (100(?:\.0+)?%|[1-9]?\d(?:\.\d+)?%)$/'
-  artifacts:
-    # always: a failed gate still publishes the report showing what is uncovered.
-    when: always
-    reports:
-      coverage_report:
-        coverage_format: cobertura
-        path: coverage.xml
-    paths:
-      - coverage.xml
-      - htmlcov/
-
-### SECURITY ###
+### SHARED COMPONENTS ###
+#
+# Pipeline behaviour shared with the other ARIA projects lives in
+# jatic/aria/ci-components. Only genuinely project-specific values are passed in.
 
 include:
   - component: gitlab.jatic.net/jatic/aria/ci-components/python-security@0.2.0
@@ -144,6 +117,13 @@ include:
       stage: security
       sast_excluded_paths: "spec,test,tests,tmp,.nox,output"
       ds_excluded_paths: "spec,test,tests,tmp,.nox,output"
+
+  - component: gitlab.jatic.net/jatic/aria/ci-components/coverage@0.3.0
+    inputs:
+      stage: publish
+      needs_job: test
+      python_image: $UV_IMAGE:python$PYTHON_LATEST_SUPPORTED_VERSION-$UV_BASE_LAYER
+      # 93.5%: above the 90% group guideline, so the gate blocks.
 
 # Scan jobs, their timing policy and the analyzer overrides all live in the
 # component above. Nothing security-related is configured here beyond the
