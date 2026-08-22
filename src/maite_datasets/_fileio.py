@@ -115,9 +115,28 @@ def _is_kaggle(url: str) -> bool:
     return hostname == "kaggle.com" or hostname.endswith(".kaggle.com")
 
 
+def _is_figshare(url: str) -> bool:
+    """Whether `url` points at figshare.
+
+    Derived from the host rather than carried on :class:`URLResource` so a resource
+    can never claim to be something its URL isn't.
+    """
+    hostname = urlparse(url).hostname or ""
+    return hostname == "figshare.com" or hostname.endswith(".figshare.com")
+
+
 def _session_setup(url: str, timeout: int) -> requests.Session:
     """Build the session used to fetch `url`, warming Kaggle cookies when needed."""
     session = requests.Session()
+
+    # figshare fronts its downloads with an AWS WAF that answers any request carrying a
+    # browser User-Agent with a challenge (HTTP 202 and an HTML interstitial in place of
+    # the file) rather than the bytes. The default requests User-Agent is served
+    # normally, so leave this session's headers untouched -- the spoofing below is what
+    # other hosts need, and is exactly what figshare rejects.
+    if _is_figshare(url):
+        return session
+
     session.headers.update(
         {
             "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",  # noqa: E501

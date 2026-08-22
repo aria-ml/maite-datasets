@@ -23,6 +23,7 @@ from maite_datasets._fileio import (
     _extract_zip_archive,
     _hf_download_settings,
     _hf_extract,
+    _is_figshare,
     _is_kaggle,
     _part_filename,
     _remove_folder_nest,
@@ -335,6 +336,35 @@ class TestHelperFunctionsBaseDataset:
     )
     def test_is_kaggle(self, url, expected):
         assert _is_kaggle(url) is expected
+
+    @pytest.mark.parametrize(
+        "url, expected",
+        [
+            ("https://api.figshare.com/v2/file/download/43169002", True),
+            ("https://figshare.com/ndownloader/files/43169002", True),
+            ("https://huggingface.co/datasets/owner/name/resolve/main/train.zip", False),
+            # Host must *end* in figshare.com -- a look-alike domain must not opt in.
+            ("https://figshare.com.example.invalid/archive.zip", False),
+            ("not-a-url", False),
+        ],
+    )
+    def test_is_figshare(self, url, expected):
+        assert _is_figshare(url) is expected
+
+    def test_figshare_keeps_the_default_user_agent(self, monkeypatch):
+        """figshare's WAF challenges browser User-Agents, so the spoof must not be applied."""
+        called = False
+
+        def mock_get(*args, **kwargs):
+            nonlocal called
+            called = True
+            return MockKaggleResponse()
+
+        monkeypatch.setattr(requests.Session, "get", mock_get)
+        session = _session_setup("https://api.figshare.com/v2/file/download/43169002", timeout=30)
+        assert called is False
+        assert "Mozilla" not in session.headers.get("User-Agent", "")
+        assert "Referer" not in session.headers
 
     def test_non_kaggle_sets_referer_and_makes_no_request(self, monkeypatch):
         called = False

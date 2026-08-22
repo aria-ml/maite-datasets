@@ -86,7 +86,7 @@ class MILCO(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str
             "2015",
             (
                 URLResource(
-                    url="https://figshare.com/ndownloader/files/43169002",
+                    url="https://api.figshare.com/v2/file/download/43169002",
                     filename="2015.zip",
                     md5=True,
                     checksum="93dfbb4fb7987734152c372496b4884c",
@@ -97,7 +97,7 @@ class MILCO(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str
             "2017",
             (
                 URLResource(
-                    url="https://figshare.com/ndownloader/files/43169005",
+                    url="https://api.figshare.com/v2/file/download/43169005",
                     filename="2017.zip",
                     md5=True,
                     checksum="9c2de230a2bbf654921416bea6fc0f42",
@@ -108,7 +108,7 @@ class MILCO(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str
             "2021",
             (
                 URLResource(
-                    url="https://figshare.com/ndownloader/files/43168999",
+                    url="https://api.figshare.com/v2/file/download/43168999",
                     filename="2021.zip",
                     md5=True,
                     checksum="b84749b21fa95a4a4c7de3741db78bc7",
@@ -119,7 +119,7 @@ class MILCO(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str
             "2010",
             (
                 URLResource(
-                    url="https://figshare.com/ndownloader/files/43169008",
+                    url="https://api.figshare.com/v2/file/download/43169008",
                     filename="2010.zip",
                     md5=True,
                     checksum="43347a0cc383c0d3dbe0d24ae56f328d",
@@ -130,7 +130,7 @@ class MILCO(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str
             "2018",
             (
                 URLResource(
-                    url="https://figshare.com/ndownloader/files/43169011",
+                    url="https://api.figshare.com/v2/file/download/43169011",
                     filename="2018.zip",
                     md5=True,
                     checksum="25d091044a10c78674fedad655023e3b",
