@@ -13,21 +13,21 @@ stages:
 ### SHARED COMPONENTS ###
 #
 # Pipeline behaviour shared with the other ARIA projects lives in
-# jatic/aria/ci-components. Only genuinely project-specific values are passed in.
+# jatic/aria/ci. Only genuinely project-specific values are passed in.
 
 include:
-  - component: gitlab.jatic.net/jatic/aria/ci-components/workflow-rules@0.6.0
+  - component: gitlab.jatic.net/jatic/aria/ci/workflow-rules@0.6.0
     inputs:
       runner_tags: ["autoscaler"]
 
-  - component: gitlab.jatic.net/jatic/aria/ci-components/uv-nox@0.6.0
+  - component: gitlab.jatic.net/jatic/aria/ci/uv-nox@0.6.0
     inputs:
       job_name: lint
       session: lint
       stage: test
       image: $UV_IMAGE:python$PYTHON_LATEST_SUPPORTED_VERSION-$UV_BASE_LAYER
 
-  - component: gitlab.jatic.net/jatic/aria/ci-components/python-matrix@0.6.0
+  - component: gitlab.jatic.net/jatic/aria/ci/python-matrix@0.6.0
     inputs:
       job_name: typecheck
       session: type
@@ -35,7 +35,7 @@ include:
       python_versions: ["3.10", "3.11", "3.12", "3.13"]
       image: $UV_IMAGE:python$PYTHON_VERSION-$UV_BASE_LAYER
 
-  - component: gitlab.jatic.net/jatic/aria/ci-components/python-matrix@0.6.0
+  - component: gitlab.jatic.net/jatic/aria/ci/python-matrix@0.6.0
     inputs:
       job_name: test
       session: test
@@ -48,13 +48,13 @@ include:
       artifact_paths: ["output/"]
       junit_report: output/junit.*.xml
 
-  - component: gitlab.jatic.net/jatic/aria/ci-components/python-security@0.6.0
+  - component: gitlab.jatic.net/jatic/aria/ci/python-security@0.6.0
     inputs:
       stage: security
       sast_excluded_paths: "spec,test,tests,tmp,.nox,output"
       ds_excluded_paths: "spec,test,tests,tmp,.nox,output"
 
-  - component: gitlab.jatic.net/jatic/aria/ci-components/coverage@0.6.0
+  - component: gitlab.jatic.net/jatic/aria/ci/coverage@0.6.0
     inputs:
       stage: publish
       needs_job: test
