@@ -1,5 +1,9 @@
 # Changelog for maite-datasets
 
+## v0.0.20
+
+- [fix] Correct typo in DroneVehicle labels
+
 ## v0.0.19
 
 - [fix] Decode palettized and grayscale images as RGB
