@@ -178,7 +178,7 @@ class DroneVehicle(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[st
             "image_depth": int(root.findtext("size/depth", default="-1")),
         }
         for obj in root.findall("object"):
-            name = obj.findtext("name", default="").replace("feright", "freight")
+            name = obj.findtext("name", default="").replace("feright", "freight").replace("_", " ")
             text_labels.append(name)
             # Annotations are rotated quadrilaterals; take their axis-aligned extent.
             xs = [int(obj.findtext(f"polygon/x{corner}", default="0")) for corner in range(1, 5)]
