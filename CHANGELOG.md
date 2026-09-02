@@ -1,5 +1,9 @@
 # Changelog for maite-datasets
 
+## v0.0.21
+
+- [impr] Remove duplicate image_id from datum metadata
+
 ## v0.0.20
 
 - [fix] Correct typo in DroneVehicle labels
