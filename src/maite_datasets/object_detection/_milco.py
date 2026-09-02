@@ -193,7 +193,7 @@ class MILCO(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str
         return filepaths, targets, datum_metadata
 
     def _load_data_inner(self) -> tuple[list[str], list[str], dict[str, Any]]:
-        file_data = {"year": [], "image_id": [], "data_path": [], "label_path": []}
+        file_data = {"year": [], "id": [], "data_path": [], "label_path": []}
         data_folder = sorted((self.path / self._resource.name).glob("*.jpg"))
         if not data_folder:
             raise FileNotFoundError
@@ -201,7 +201,9 @@ class MILCO(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str
         for entry in data_folder:
             # Remove file extension and split by "_"
             parts = entry.stem.split("_")
-            file_data["image_id"].append(parts[0])
+            # The whole stem, since an image_set can merge several year resources and each
+            # year numbers its images from zero -- the leading fragment alone repeats.
+            file_data["id"].append(entry.stem)
             file_data["year"].append(parts[1])
             file_data["data_path"].append(str(entry))
             file_data["label_path"].append(str(entry.parent / entry.stem) + ".txt")

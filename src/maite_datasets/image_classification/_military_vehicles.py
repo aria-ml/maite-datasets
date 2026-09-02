@@ -183,5 +183,5 @@ class MilitaryVehicles(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
         if not data_folder:
             raise FileNotFoundError
 
-        file_data = {"image_id": [f"{group_dir}_{entry.stem}" for entry in data_folder]}
+        file_data = {"id": [f"{group_dir}_{entry.stem}" for entry in data_folder]}
         return [str(entry) for entry in data_folder], file_data

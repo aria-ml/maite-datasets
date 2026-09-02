@@ -381,7 +381,7 @@ class BaseVOCDataset(BaseDownloadedDataset[NumpyArray, NumpyObjectDetectionTarge
 
     def _load_data_inner(self) -> tuple[list[str], list[str], dict[str, Any]]:
         """Function to load in the file paths for the data, annotations and segmentation masks"""
-        file_meta = {"year": [], "image_id": [], "mask_path": []}
+        file_meta = {"year": [], "id": [], "mask_path": []}
         ann_folder = self.path / "Annotations"
         seg_folder = self.path / "SegmentationClass"
 
@@ -398,10 +398,10 @@ class BaseVOCDataset(BaseDownloadedDataset[NumpyArray, NumpyObjectDetectionTarge
                 # Remove file extension and split by "_"
                 parts = file_stem.split("_")
                 file_meta["year"].append(parts[0])
-                file_meta["image_id"].append(parts[1])
+                file_meta["id"].append(parts[1])
             else:
                 file_meta["year"].append(self.year)
-                file_meta["image_id"].append(file_stem)
+                file_meta["id"].append(file_stem)
             file_meta["mask_path"].append(str(seg_folder / file_name))
             annotations.append(str(ann_folder / file_stem) + ".xml")
 

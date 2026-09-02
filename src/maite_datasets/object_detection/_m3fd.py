@@ -186,7 +186,7 @@ class M3FD(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str]
         if not data_folder:
             raise FileNotFoundError
 
-        file_data = {"image_id": [f"{entry.stem}" for entry in data_folder]}
+        file_data = {"id": [f"{entry.stem}" for entry in data_folder]}
         data = [str(entry) for entry in data_folder]
         annotations = sorted(str(entry) for entry in label_dir.glob("*.xml")) if label_dir.is_dir() else []
 

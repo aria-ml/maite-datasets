@@ -144,7 +144,7 @@ class DroneVehicle(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[st
 
             filepaths.extend([str(entry) for entry in data_folder])
             targets.extend(sorted(str(entry) for entry in (base_dir / f"{resource}labelr").glob("*.xml")))
-            file_data = {"image_id": [f"{resource}_{entry.name}" for entry in data_folder]}
+            file_data = {"id": [f"{resource}_{entry.name}" for entry in data_folder]}
             _merge_datum_metadata(datum_metadata, file_data)
 
         return filepaths, targets, datum_metadata

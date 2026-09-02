@@ -150,7 +150,8 @@ class TestM3FD:
         assert np.array_equal(target.labels, [0, 1])
         assert np.array_equal(target.boxes[0], [1, 2, 5, 6])
         assert datum_meta["image_width"] == 10
-        assert datum_meta["image_id"] == "00000"
+        assert datum_meta["id"] == "00000"
+        assert "image_id" not in datum_meta
 
     def test_m3fd_operational(self, m3fd_fake):
         dataset = M3FD(root=m3fd_fake, image_set="operational")
@@ -176,7 +177,7 @@ class TestDroneVehicle:
         assert np.array_equal(target.labels, [4])
         # Rotated quadrilateral reduced to its axis-aligned extent
         assert np.array_equal(target.boxes[0], [10, 20, 40, 60])
-        assert datum_meta["image_id"] == "train_00000.jpg"
+        assert datum_meta["id"] == "train_00000.jpg"
         assert datum_meta["infrared_filename"] == "ir_00001.jpg"
         assert datum_meta["rgb_filename"] == "rgb_00001.jpg"
         # IR depth plus RGB depth
@@ -185,7 +186,7 @@ class TestDroneVehicle:
     def test_dronevehicle_base(self, dronevehicle_fake):
         dataset = DroneVehicle(root=dronevehicle_fake, image_set="base")
         assert len(dataset) == 6
-        assert len(dataset._datum_metadata["image_id"]) == 6
+        assert len(dataset._datum_metadata["id"]) == 6
 
     def test_dronevehicle_root_containing_img_segment(self, tmp_path):
         """The IR/RGB siblings are derived per path component, not by string replacement.
@@ -282,7 +283,7 @@ class TestMilitaryVehicles:
         assert img.shape == (3, 10, 10)
         assert score.shape == (24,)
         assert score[0] == 1
-        assert datum_meta["image_id"] == "2S19_MSTA_00000"
+        assert datum_meta["id"] == "2S19_MSTA_00000"
 
     def test_vehicles_base(self, military_vehicles_fake):
         dataset = MilitaryVehicles(root=military_vehicles_fake, image_set="base")

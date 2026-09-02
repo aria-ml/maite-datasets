@@ -234,6 +234,19 @@ class TestVOC:
         assert np.all(target.labels == [11, 8])
         assert "pose" in datum_meta
 
+    def test_voc_datum_id_is_the_image_name(self, voc_fake, monkeypatch):
+        """The year is split off into its own key, so the id is the rest of the stem.
+
+        A VOC instance is built for one year, so that fragment names the item on its own.
+        """
+        monkeypatch.setattr(VOCDetection, "_resources", self.mock_resources(voc_fake))
+        dataset = VOCDetection(root=voc_fake)
+        datum_meta = dataset[0][2]
+
+        assert datum_meta["id"] == "001573"
+        assert datum_meta["year"] == "2009"
+        assert "image_id" not in datum_meta
+
     @pytest.mark.year(2011)
     def test_voc_2011(self, voc_fake, monkeypatch):
         monkeypatch.setattr(VOCDetection, "_resources", self.mock_resources(voc_fake, year=2011))
@@ -280,6 +293,25 @@ class TestMILCO:
                 assert isinstance(target, ObjectDetectionTarget)
                 assert "year" in datum_meta
 
+    def test_milco_datum_ids_are_unique_across_year_resources(self, milco_fake):
+        """The id has to carry the year: image_set="train" merges three year resources.
+
+        The filenames are ``<n>_<year>.jpg`` and each year numbers from 0, so the leading
+        fragment alone repeats once per year -- 12 items, 6 distinct values.
+        """
+        dataset = MILCO(root=milco_fake)
+        ids = dataset._datum_metadata["id"]
+
+        assert len(ids) == len(dataset)
+        assert len(set(ids)) == len(ids)
+        assert ids[0] == "0_2015"
+
+    def test_milco_keeps_year_as_its_own_key(self, milco_fake):
+        """The year groups items, so it stays a factor of its own alongside the id."""
+        dataset = MILCO(root=milco_fake)
+        assert dataset[0][2]["year"] == "2015"
+        assert "image_id" not in dataset[0][2]
+
 
 @pytest.mark.optional
 class TestAntiUAVDetection:
@@ -296,6 +328,15 @@ class TestAntiUAVDetection:
                 img, target, datum_meta = dataset[i]
                 assert img.shape == (3, 10, 10)
                 assert isinstance(target, ObjectDetectionTarget)
+
+    def test_antiuav_datum_ids_are_unique_across_resources(self, antiuav_fake):
+        """``image_set="base"`` merges every resource, so the id carries the resource name."""
+        dataset = AntiUAVDetection(root=antiuav_fake, image_set="base")
+        ids = dataset._datum_metadata["id"]
+
+        assert len(ids) == len(dataset)
+        assert len(set(ids)) == len(ids)
+        assert "image_id" not in dataset[0][2]
 
     def test_antiuav_base(self, antiuav_fake):
         "Test AntiUAVDetection dataset initialization"
@@ -328,7 +369,7 @@ class TestSeaDrone:
                 img, target, datum_meta = dataset[i]
                 assert img.shape == (3, 10, 10)
                 assert isinstance(target, ObjectDetectionTarget)
-                image_ids.append(datum_meta["image_id"])
+                image_ids.append(datum_meta["id"])
             assert image_ids == [0, 4, 8, 12, 16]
 
     def test_seadrone_base(self, seadrone_fake):
@@ -345,5 +386,5 @@ class TestSeaDrone:
                 img, target, datum_meta = dataset[i]
                 assert img.shape == (3, 10, 10)
                 assert isinstance(target, ObjectDetectionTarget)
-                image_ids.append(datum_meta["image_id"])
+                image_ids.append(datum_meta["id"])
             assert image_ids == [0, 4, 7, 8, 12, 14, 16, 21, 27, 36]

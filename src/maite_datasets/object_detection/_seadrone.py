@@ -658,12 +658,12 @@ class SeaDrone(
 
         # Initialize the restructured dictionary
         restructured_data = {key: [] for key in all_keys}
-        restructured_data["image_id"] = []
+        restructured_data["id"] = []
         restructured_data["label_box"] = []
 
         # Create the lists
         for file_id, file_dict in file_data.items():
-            restructured_data["image_id"].append(file_id)
+            restructured_data["id"].append(file_id)
             restructured_data["label_box"].append((file_dict.get("label", []), file_dict.get("box", [])))
             for key in all_keys:
                 restructured_data[key].append(file_dict.get(key, None))

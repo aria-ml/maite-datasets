@@ -181,7 +181,7 @@ class AntiUAVDetection(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, lis
         if not data_folder:
             raise FileNotFoundError
 
-        file_data = {"image_id": [f"{resource_name}_{entry.name}" for entry in data_folder]}
+        file_data = {"id": [f"{resource_name}_{entry.name}" for entry in data_folder]}
         data = [str(entry) for entry in data_folder]
         annotations = sorted(str(entry) for entry in (base_dir / "xml").glob("*.xml"))
 
