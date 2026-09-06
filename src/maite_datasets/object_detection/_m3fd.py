@@ -147,6 +147,8 @@ class M3FD(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str]
         download: bool = False,
         verbose: bool = False,
         lazy: bool = False,
+        *,
+        as_datamaite: bool = False,
     ) -> None:
         super().__init__(
             root,
@@ -155,6 +157,7 @@ class M3FD(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str]
             download,
             verbose,
             lazy,
+            as_datamaite=as_datamaite,
         )
 
     def _load_data(self) -> tuple[list[str], list[str], dict[str, list[Any]]]:

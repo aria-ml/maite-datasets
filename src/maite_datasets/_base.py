@@ -84,6 +84,24 @@ class Dataset(Generic[_T_co]):
 class BaseDataset(Dataset[tuple[_TArray, _TTarget, DatumMetadata]]):
     metadata: DatasetMetadata
 
+    def __new__(cls, *args: Any, as_datamaite: bool = False, **kwargs: Any) -> Any:
+        if as_datamaite:
+            from maite_datasets._datamaite import build_datamaite_dataset
+
+            return build_datamaite_dataset(cls, *args, **kwargs)
+        return super().__new__(cls)
+
+    def to_datamaite(self, dest: str | Path) -> Any:
+        """Export this dataset to disk in a datamaite-compatible format and return the loaded datamaite dataset.
+
+        Object detection writes COCO and image classification writes YOLO -- the one
+        format each task can be written in. `dest` is replaced, not added to, so
+        re-exporting a dataset is idempotent.
+        """
+        from maite_datasets._datamaite import export_to_datamaite
+
+        return export_to_datamaite(self, dest)
+
     def __init__(self, transforms: DatasetTransforms[_TArray, _TTarget]) -> None:
         self.transforms: list[DatumTransform[_TArray, _TTarget]] = []
         self._image_transforms: list[ImageTransform[_TArray]] = []
@@ -226,12 +244,15 @@ class BaseDownloadedDataset(
         download: bool = False,
         verbose: bool = False,
         lazy: bool = False,
+        *,
+        as_datamaite: bool = False,
     ) -> None:
         super().__init__(transforms)
         self.lazy = lazy
         self._root: Path = root.absolute() if isinstance(root, Path) else Path(root).absolute()
         self.image_set = image_set
         self._verbose = verbose
+        self._as_datamaite = as_datamaite
 
         # Internal Attributes
         self._download = download

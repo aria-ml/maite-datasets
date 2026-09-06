@@ -504,6 +504,8 @@ class SeaDrone(
         download: bool = False,
         verbose: bool = False,
         lazy: bool = False,
+        *,
+        as_datamaite: bool = False,
     ) -> None:
         super().__init__(
             root,
@@ -512,6 +514,7 @@ class SeaDrone(
             download,
             verbose,
             lazy,
+            as_datamaite=as_datamaite,
         )
 
     def _create_structure(self) -> None:

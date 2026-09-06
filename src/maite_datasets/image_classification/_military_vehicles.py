@@ -142,8 +142,10 @@ class MilitaryVehicles(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
         download: bool = False,
         verbose: bool = False,
         lazy: bool = False,
+        *,
+        as_datamaite: bool = False,
     ) -> None:
-        super().__init__(root, image_set, transforms, download, verbose, lazy)
+        super().__init__(root, image_set, transforms, download, verbose, lazy, as_datamaite=as_datamaite)
 
     def _load_data(self) -> tuple[list[str], Sequence[int], dict[str, Any]]:
         # Only the selected image set is worth fetching, and the pattern that expresses

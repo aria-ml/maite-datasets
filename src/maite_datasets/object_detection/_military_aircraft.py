@@ -248,6 +248,8 @@ class MilitaryAircraft(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, lis
         download: bool = False,
         verbose: bool = False,
         lazy: bool = False,
+        *,
+        as_datamaite: bool = False,
     ) -> None:
         super().__init__(
             root,
@@ -256,6 +258,7 @@ class MilitaryAircraft(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, lis
             download,
             verbose,
             lazy,
+            as_datamaite=as_datamaite,
         )
         # Annotations are normalized YOLO coordinates; scale them to pixels on access.
         self._bboxes_per_size = True
