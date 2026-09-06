@@ -1,5 +1,9 @@
 # Changelog for maite-datasets
 
+## v0.0.21
+
+- [feat] Add export to datamaite wire format
+
 ## v0.0.20
 
 - [fix] Correct typo in DroneVehicle labels
