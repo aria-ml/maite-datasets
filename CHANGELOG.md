@@ -1,8 +1,12 @@
 # Changelog for maite-datasets
 
-## v0.0.21
+## v0.0.22
 
 - [feat] Add export to datamaite wire format
+
+## v0.0.21
+
+- [impr] Remove duplicate image_id from datum metadata
 
 ## v0.0.20
 
