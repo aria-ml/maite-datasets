@@ -93,6 +93,8 @@ class Ships(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
         download: bool = False,
         verbose: bool = False,
         lazy: bool = False,
+        *,
+        as_datamaite: bool = False,
     ) -> None:
         super().__init__(
             root,
@@ -101,6 +103,7 @@ class Ships(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
             download,
             verbose,
             lazy,
+            as_datamaite=as_datamaite,
         )
         self._scenes: list[str] = self._load_scenes()
         self._remove_extraneous_json_file()

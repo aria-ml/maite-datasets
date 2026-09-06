@@ -128,6 +128,8 @@ class AntiUAVDetection(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, lis
         download: bool = False,
         verbose: bool = False,
         lazy: bool = False,
+        *,
+        as_datamaite: bool = False,
     ) -> None:
         super().__init__(
             root,
@@ -136,6 +138,7 @@ class AntiUAVDetection(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, lis
             download,
             verbose,
             lazy,
+            as_datamaite=as_datamaite,
         )
 
     def _load_data(self) -> tuple[list[str], list[str], dict[str, list[Any]]]:

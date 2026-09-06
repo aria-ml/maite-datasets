@@ -114,6 +114,8 @@ class DroneVehicle(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[st
         download: bool = False,
         verbose: bool = False,
         lazy: bool = False,
+        *,
+        as_datamaite: bool = False,
     ) -> None:
         super().__init__(
             root,
@@ -122,6 +124,7 @@ class DroneVehicle(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[st
             download,
             verbose,
             lazy,
+            as_datamaite=as_datamaite,
         )
 
     def _load_data_inner(self) -> tuple[list[str], list[str], dict[str, Any]]:

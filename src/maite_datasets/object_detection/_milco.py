@@ -152,6 +152,8 @@ class MILCO(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str
         download: bool = False,
         verbose: bool = False,
         lazy: bool = False,
+        *,
+        as_datamaite: bool = False,
     ) -> None:
         super().__init__(
             root,
@@ -160,6 +162,7 @@ class MILCO(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[str], str
             download,
             verbose,
             lazy,
+            as_datamaite=as_datamaite,
         )
         self._bboxes_per_size = True
 

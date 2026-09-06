@@ -171,6 +171,8 @@ class BaseVOCDataset(BaseDownloadedDataset[NumpyArray, NumpyObjectDetectionTarge
         download: bool = False,
         verbose: bool = False,
         lazy: bool = False,
+        *,
+        as_datamaite: bool = False,
     ) -> None:
         self.year = year
         self._resource_index = self._get_year_image_set_index(year, image_set)
@@ -181,6 +183,7 @@ class BaseVOCDataset(BaseDownloadedDataset[NumpyArray, NumpyObjectDetectionTarge
             download,
             verbose,
             lazy,
+            as_datamaite=as_datamaite,
         )
 
     def _get_dataset_dir(self) -> Path:

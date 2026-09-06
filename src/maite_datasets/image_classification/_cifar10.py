@@ -101,6 +101,8 @@ class CIFAR10(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
         download: bool = False,
         verbose: bool = False,
         lazy: bool = False,
+        *,
+        as_datamaite: bool = False,
     ) -> None:
         super().__init__(
             root,
@@ -109,6 +111,7 @@ class CIFAR10(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
             download,
             verbose,
             lazy,
+            as_datamaite=as_datamaite,
         )
 
     def _load_bin_data(self, data_folder: list[Path]) -> tuple[list[str], list[int], dict[str, Any]]:

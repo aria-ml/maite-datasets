@@ -14,12 +14,13 @@ pip install maite-datasets
 
 Optional features are installed as extras, e.g. `pip install maite-datasets[tqdm]`.
 
-| Extra  | Enables                                                                         |
-|--------|---------------------------------------------------------------------------------|
-| `tqdm` | Status bar indicators when downloading.                                         |
-| `hf`   | Downloading datasets hosted on Hugging Face Hub and decoding their TIFF images. |
-| `av`   | Decoding video into frames for multi-object tracking datasets.                  |
-| `all`  | All of the above.                                                               |
+| Extra       | Enables                                                                         |
+|-------------|---------------------------------------------------------------------------------|
+| `tqdm`      | Status bar indicators when downloading.                                         |
+| `hf`        | Downloading datasets hosted on Hugging Face Hub and decoding their TIFF images. |
+| `av`        | Decoding video into frames for multi-object tracking datasets.                  |
+| `datamaite` | Exporting and reading datasets via `datamaite` wire formats on disk.            |
+| `all`       | All of the above.                                                               |
 
 ## Available Downloadable Datasets
 
@@ -75,6 +76,46 @@ MNIST Dataset
 >>> print("tuple("+", ".join([str(type(t)) for t in mnist[0]])+")")
 tuple(<class 'numpy.ndarray'>, <class 'numpy.ndarray'>, <class 'dict'>)
 ```
+
+## datamaite Interoperability
+
+With the `datamaite` extra installed, any dataset can be written to disk in a
+`datamaite` wire format (COCO or YOLO) and read back as a `datamaite` dataset.
+
+```python
+>>> from maite_datasets.object_detection import MILCO
+
+# Export an existing dataset, then load it back through datamaite
+>>> milco = MILCO(root="data", download=True)
+>>> dm_milco = milco.to_datamaite(dest="exports/milco")
+
+# Or download, convert and load in one step
+>>> dm_milco = MILCO(root="data", download=True, as_datamaite=True)
+```
+
+The format follows from the task and is not selectable, because each task only has one
+that works. **Object detection writes COCO** — the only one of the two that records a
+datum's own metadata, a dataset's telemetry as per-image columns and its per-object
+values as detection attributes. **Image classification writes YOLO**, because
+datamaite's COCO writer is task-closed and refuses an IC dataset outright.
+
+Reading is more permissive than writing: an existing directory in either format is
+sniffed and loaded, so a YOLO dataset already on disk still works with
+`as_datamaite=True`.
+
+`as_datamaite=True` writes to `<root>/<dataset>_datamaite`, kept separate from the
+`<root>/<dataset>` folder raw downloads use so the two can coexist under one root. An
+existing export there is reused; otherwise a raw dataset already under `root` is
+converted in place, and only a genuinely missing dataset is downloaded (to a temporary
+directory that is discarded after conversion).
+
+Two conversion details are worth knowing. Splits are folded onto `train`/`val`/`test`,
+because those are the only ones the wire formats read back: an `image_set` such as
+`operational` is exported as `train`, with a warning, and its original name survives in
+each sample's metadata, which object detection keeps and image classification cannot.
+And datasets carrying transforms export re-encoded pixels rather than
+referencing the original files, so the written images always match the written
+annotations.
 
 ## Dataset Wrappers
 

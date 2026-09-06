@@ -265,6 +265,8 @@ class MilitaryAircraft(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
         download: bool = False,
         verbose: bool = False,
         lazy: bool = False,
+        *,
+        as_datamaite: bool = False,
     ) -> None:
         super().__init__(
             root,
@@ -273,6 +275,7 @@ class MilitaryAircraft(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
             download,
             verbose,
             lazy,
+            as_datamaite=as_datamaite,
         )
 
     def _load_data_inner(self) -> tuple[list[str], list[int], dict[str, Any]]:

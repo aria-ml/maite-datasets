@@ -39,11 +39,13 @@ hf = [
   "huggingface-hub>=1.23.0",
   "imagecodecs>=2024.12.30",
 ]
+datamaite = ["datamaite>=0.5.0"]
 all = [
   "av>=12.0.0",
   "huggingface-hub>=1.23.0",
   "imagecodecs>=2024.12.30",
   "tqdm>=4.66",
+  "datamaite>=0.5.0",
 ]
 
 [dependency-groups]

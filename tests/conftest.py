@@ -158,7 +158,7 @@ def milco_fake(tmp_path_factory):
         image.save(c_temp / f"{i}_2021.jpg")
         object1 = f"{int(np.random.choice([0, 1]))} {300 / 1024} {753 / 1024} {56 / 1024} {43 / 1024}"
         object2 = f"{int(np.random.choice([0, 1]))} {829 / 1024} {115 / 1024} {56 / 1024} {43 / 1024}"
-        with open(c_temp / f"{i}_2015.txt", mode="w") as f:
+        with open(c_temp / f"{i}_2021.txt", mode="w") as f:
             f.write(f"{object1}\n{object2}")
     yield temp
 

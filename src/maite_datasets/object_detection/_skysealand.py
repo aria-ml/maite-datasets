@@ -88,11 +88,14 @@ class SkySeaLand(YOLODataset):
         download: bool = False,
         verbose: bool = False,
         lazy: bool = False,
+        *,
+        as_datamaite: bool = False,
     ) -> None:
         self._root: Path = root.absolute() if isinstance(root, Path) else Path(root).absolute()
         self.image_set = image_set
         self._download = download
         self._verbose = verbose
+        self._as_datamaite = as_datamaite
         self.path: Path = self._get_dataset_dir()
         unique_id = f"{self.__class__.__name__}_{self.image_set}"
 

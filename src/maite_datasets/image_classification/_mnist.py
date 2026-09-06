@@ -140,6 +140,8 @@ class MNIST(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
         download: bool = False,
         verbose: bool = False,
         lazy: bool = False,
+        *,
+        as_datamaite: bool = False,
     ) -> None:
         self.corruption = corruption
         if self.corruption == "identity" and verbose:
@@ -155,6 +157,7 @@ class MNIST(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
             download,
             verbose,
             lazy,
+            as_datamaite=as_datamaite,
         )
 
     def _load_data_inner(self) -> tuple[list[str], list[int], dict[str, Any]]:
