@@ -1,5 +1,10 @@
 # Changelog for maite-datasets
 
+## v0.0.23
+
+- [fix] Treat huggingface download flags as defaults, not overrides
+- [fix] Scope datamaite exports to their image_set
+
 ## v0.0.22
 
 - [feat] Add export to datamaite wire format
