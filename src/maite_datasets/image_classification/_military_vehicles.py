@@ -154,8 +154,13 @@ class MilitaryVehicles(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
     Ground truth labels are provided for the train and test set.
 
     There are 9,444 images: 7,823 images in the train set and 1,621 images in the test set.
-    The dataset has 24 classes from 6 overarching military vehicle categories.
+    The dataset has 24 fine classes grouped into 7 overarching military vehicle categories,
+    and ``labels`` selects which of the two each datum is labeled with.
     There is wide variation in image sizes.
+
+    The download uses the hub's parquet conversion of the repo, which is two files rather
+    than the 9,466 the image tree holds, and falls back to the image tree if that branch
+    is unavailable. Neither path needs a huggingface token.
 
     Parameters
     ----------
@@ -175,6 +180,10 @@ class MilitaryVehicles(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
         When True, the image element of each datum is returned as a
         :class:`LazyArray` that defers PIL decode until first numpy access.
         Useful for metadata-only iteration over large image folders.
+    labels : "fine" or "coarse", default "fine"
+        Which labeling each datum carries. "fine" is the 24 vehicle classes; "coarse" is
+        the 7 categories of ``hierarchy`` that group them, numbered alphabetically. Both
+        read the same images, so the two can be built over one download.
 
     Attributes
     ----------
@@ -194,6 +203,8 @@ class MilitaryVehicles(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
         Typed dictionary containing dataset metadata, such as `id` which returns the dataset class name.
     hierarchy : dict[str, Any]
         Dictionary form of the label hierarchy. Can be used to create a class ontology.
+    labels : "fine" or "coarse"
+        The labeling this dataset was built with. Read-only.
 
     Note
     ----

@@ -1,5 +1,11 @@
 # Changelog for maite-datasets
 
+## Unreleased
+
+- [impr] Download MilitaryVehicles from its parquet conversion instead of file by file
+- [feat] Add a coarse labeling option to MilitaryVehicles
+- [fix] Reject a MilitaryVehicles tree whose image and target counts disagree
+
 ## v0.0.23
 
 - [fix] Treat huggingface download flags as defaults, not overrides

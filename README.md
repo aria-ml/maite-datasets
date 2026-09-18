@@ -52,6 +52,8 @@ Optional features are installed as extras, e.g. `pip install maite-datasets[tqdm
 
 The paired RGB-infrared datasets (`DroneVehicle`, `M3FD`) stack the infrared channel onto the RGB image.
 `MilitaryAircraft` and `MilitaryVehicles` expose a `hierarchy` attribute describing their class ontology.
+`MilitaryVehicles` also accepts `labels="coarse"` to label each image with one of the 7 categories in that
+hierarchy instead of its fine class; both labelings read the same images, so no second download is needed.
 Every dataset accepts `lazy=True` to defer image decoding until the image is actually read, which keeps
 metadata-only passes over large datasets cheap.
 
