@@ -325,6 +325,11 @@ def _ensure_exists(
 #                               a token negotiation per file, and these repos are
 #                               thousands of small images: it measured roughly five times
 #                               slower and multiplied requests enough to draw 429s.
+#                               Only a default: disabling xet routes every transfer
+#                               through the classic CDN, and on networks that reach only
+#                               the xet endpoint that is the difference between a slow
+#                               download and one that never returns. A caller who sets
+#                               the variable keeps their value.
 #   HF_HUB_DISABLE_TELEMETRY -- fetching a dataset should not phone home for the caller.
 # Progress bars are handled separately: the hub binds that constant by value at import
 # (``from ..constants import ...``), so only its public toggle has any effect.
@@ -357,6 +362,15 @@ def _hf_download_settings() -> Generator[None, None, None]:
     previously_quiet = are_progress_bars_disabled()
 
     for name in HF_DOWNLOAD_FLAGS:
+        explicit = previous_env[name]
+        if explicit is not None:
+            # A caller who set this has a reason, so these are defaults rather than
+            # overrides. Mirror the value onto the constant as well: the hub reads the
+            # env var only as it imports, so a preference expressed after that point is
+            # otherwise a silent no-op -- the same trap this contextmanager exists to
+            # avoid for its own writes.
+            setattr(hf_constants, name, explicit == "1")
+            continue
         setattr(hf_constants, name, True)
         os.environ[name] = "1"
     # This module prints its own file count, so the hub's bars are redundant noise.

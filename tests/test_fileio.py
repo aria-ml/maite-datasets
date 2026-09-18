@@ -151,9 +151,24 @@ class TestHFDownloadSettings:
         monkeypatch.setenv(flag, preset)
         monkeypatch.setattr(hf_constants, flag, preset == "1")
         with _hf_download_settings():
-            assert getattr(hf_constants, flag) is True
+            pass
         assert os.environ[flag] == preset
         assert getattr(hf_constants, flag) is (preset == "1")
+
+    @pytest.mark.parametrize("flag", HF_DOWNLOAD_FLAGS)
+    def test_an_explicit_caller_setting_wins(self, monkeypatch, flag):
+        """These are defaults, not overrides.
+
+        A caller who sets one of these has a reason. Forcing ``HF_HUB_DISABLE_XET`` on
+        routes every transfer through the classic CDN, and on a network where only the
+        xet endpoint is reachable that turns a download into a hang with no diagnostic --
+        which the caller cannot escape if the preference is overwritten here.
+        """
+        monkeypatch.setenv(flag, "0")
+        monkeypatch.setattr(hf_constants, flag, False)
+        with _hf_download_settings():
+            assert getattr(hf_constants, flag) is False
+            assert os.environ[flag] == "0"
 
     def test_silences_progress_bars_and_restores_them(self):
         """Progress bars need the public toggle: the hub binds that constant by value."""
