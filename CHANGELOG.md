@@ -1,6 +1,6 @@
 # Changelog for maite-datasets
 
-## Unreleased
+## v0.0.24
 
 - [impr] Download MilitaryVehicles from its parquet conversion instead of file by file
 - [feat] Add a coarse labeling option to MilitaryVehicles
