@@ -92,15 +92,26 @@ def detect_format(dest: Path, task: str) -> str | None:
     return None
 
 
-def _resolve_dataset_dir(root: Path, name: str) -> Path:
+def _resolve_dataset_dir(root: Path, name: str, image_set: str | None = None) -> Path:
     """Destination for a dataset's datamaite export under `root`.
 
     Deliberately not the ``root / name.lower()`` folder raw downloads use: sharing it
     would make a root that already holds a normal download unusable for ``as_datamaite``.
-    ``root`` is used as-is when it already points at the export folder.
+
+    The ``image_set`` is part of the folder name because an export holds exactly one of
+    them and neither wire format can separate them again on the way back: COCO records
+    no split at all, and YOLO reads back only the three canonical names, so
+    ``operational`` and ``base`` both land under ``train``. Sharing one folder therefore
+    served whichever image_set was exported first to every later caller -- silently, and
+    as the wrong data rather than an error.
+
+    ``root`` is used as-is when it already points at an export folder, under either the
+    split-scoped name or the flat one written before this was split-aware. Pointing at a
+    folder is explicit, so there is no image_set left to disambiguate.
     """
-    dirname = f"{name.lower()}_datamaite"
-    return root if root.stem.lower() == dirname else root / dirname
+    base = f"{name.lower()}_datamaite"
+    dirname = f"{base}_{image_set.lower()}" if image_set else base
+    return root if root.stem.lower() in (dirname, base) else root / dirname
 
 
 def load_datamaite_dataset(dest: Path, task: str, dataset_format: str, split: str | None = None, **options: Any) -> Any:
@@ -551,7 +562,7 @@ def build_datamaite_dataset(cls: type, *args: Any, **kwargs: Any) -> Any:
 
     root, image_set, download, bound_kwargs = _extract_parameters(cls, args, kwargs)
     task = get_dataset_task(cls)
-    dest = _resolve_dataset_dir(root, cls.__name__)
+    dest = _resolve_dataset_dir(root, cls.__name__, image_set)
 
     # 1. A previous export is reused as-is.
     if dest.exists() and any(dest.iterdir()):

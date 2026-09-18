@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import io
+import shutil
 import sys
 import tempfile
+import warnings
 from pathlib import Path
 from unittest.mock import patch
 
@@ -100,7 +102,7 @@ class TestFormatIsNotSelectable:
 
         from maite_datasets._datamaite import _convert_od_dataset
 
-        dest = tmp_path / "milco_datamaite"
+        dest = tmp_path / "milco_datamaite_train"
         datamaite.write(_convert_od_dataset(MILCO(root=milco_fake), split="train"), dest, output_format="yolo")
         assert detect_format(dest, "od") == "yolo"
 
@@ -111,7 +113,7 @@ class TestFormatIsNotSelectable:
 class TestDatamaiteODIntegration:
     def test_unreadable_export_dir_raises_value_error(self, tmp_path):
         """An export directory holding something other than a datamaite dataset is an error."""
-        junk = tmp_path / "milco_datamaite"
+        junk = tmp_path / "milco_datamaite_train"
         junk.mkdir()
         (junk / "notes.txt").write_text("not a dataset")
         with pytest.raises(ValueError, match="already exists but is not in a datamaite-compatible format"):
@@ -125,7 +127,7 @@ class TestDatamaiteODIntegration:
     def test_milco_to_datamaite_and_reload(self, milco_fake, tmp_path):
         """Test exporting an existing MILCO dataset to datamaite format and reloading it."""
         raw_milco = MILCO(root=milco_fake)
-        dest_dir = tmp_path / "milco_datamaite"
+        dest_dir = tmp_path / "milco_datamaite_train"
 
         dm_milco = raw_milco.to_datamaite(dest=dest_dir)
         assert isinstance(dm_milco, ObjectDetectionDataset)
@@ -140,7 +142,7 @@ class TestDatamaiteODIntegration:
     def test_download_uses_tempdir_and_cleans_up(self, milco_fake, tmp_path, monkeypatch):
         """Test that download=True with as_datamaite=True uses a temp directory and cleans it up."""
         dest_root = tmp_path / "fresh"
-        dest_dir = dest_root / "milco_datamaite"
+        dest_dir = dest_root / "milco_datamaite_train"
         assert not dest_dir.exists()
 
         created_tmp_dirs: list[Path] = []
@@ -190,7 +192,7 @@ class TestDatamaiteODIntegration:
         _ = VOCDetection(root=voc_fake)
         dir_path = voc_fake / "vocdataset" / "VOCdevkit" / "VOC2012"
         raw_voc = VOCDetection(root=dir_path, image_set="val")
-        dest_dir = tmp_path / "vocdetection_datamaite"
+        dest_dir = tmp_path / "vocdetection_datamaite_val"
 
         dm_voc = raw_voc.to_datamaite(dest=dest_dir)
         assert isinstance(dm_voc, ObjectDetectionDataset)
@@ -198,7 +200,7 @@ class TestDatamaiteODIntegration:
         assert detect_format(dest_dir, "od") == "coco"
 
         # Reloading from root
-        reloaded = VOCDetection(root=tmp_path, as_datamaite=True)
+        reloaded = VOCDetection(root=tmp_path, image_set="val", as_datamaite=True)
         assert isinstance(reloaded, ObjectDetectionDataset)
         assert len(reloaded) == len(raw_voc)
 
@@ -207,7 +209,7 @@ class TestDatamaiteICIntegration:
     def test_mnist_to_datamaite_and_reload(self, mnist_npy, tmp_path):
         """Test exporting in-memory array MNIST to YOLO ImageFolder datamaite format and reloading it."""
         raw_mnist = MNIST(root=str(mnist_npy), image_set="test")
-        dest_dir = tmp_path / "mnist_datamaite"
+        dest_dir = tmp_path / "mnist_datamaite_test"
 
         dm_mnist = raw_mnist.to_datamaite(dest=dest_dir)
         assert isinstance(dm_mnist, ImageClassificationDataset)
@@ -549,3 +551,50 @@ class TestProvenanceMetadata:
         with pytest.warns(UserWarning):
             dm = raw.to_datamaite(dest=tmp_path / "out")
         assert dm.samples[0].metadata["original_split"] == "operational"
+
+
+@pytest.fixture
+def milco_all_image_sets_fake(tmp_path):
+    """MILCO layout holding both the `train` (2015/17/21) and `operational` (2010/18) resources.
+
+    The per-year counts differ so a split that silently returns the other one is visible
+    in the sample count alone.
+    """
+    counts = {"2015": 3, "2017": 2, "2021": 1, "2010": 4, "2018": 5}
+    for year, count in counts.items():
+        year_dir = tmp_path / "milco" / year
+        year_dir.mkdir(parents=True, exist_ok=True)
+        for i in range(count):
+            Image.fromarray(np.full((10, 10, 3), 128, dtype=np.uint8)).save(year_dir / f"{i}_{year}.jpg")
+            # A centered box that stays positive once MILCO scales it by the image size;
+            # a degenerate one would be dropped by the COCO writer and muddy the counts.
+            (year_dir / f"{i}_{year}.txt").write_text("0 0.5 0.5 0.4 0.4")
+    return tmp_path
+
+
+class TestExportsAreScopedToTheirImageSet:
+    """One root, several image_sets: each must get its own export, not the first one built."""
+
+    def test_od_image_sets_do_not_share_an_export(self, milco_all_image_sets_fake):
+        """The second image_set must not be served the first one's data."""
+        root = milco_all_image_sets_fake
+        train = MILCO(root=root, image_set="train", as_datamaite=True)
+        with warnings.catch_warnings():
+            # `operational` folds to the `train` split label on export; that warning has
+            # its own test, and it is not what this one is about.
+            warnings.simplefilter("ignore", UserWarning)
+            operational = MILCO(root=root, image_set="operational", as_datamaite=True)
+
+        assert len(train.samples) == 6
+        assert len(operational.samples) == 9
+
+    def test_ic_image_sets_do_not_share_an_export(self, mnist_npy, tmp_path):
+        """The YOLO path fails the other way -- an empty dataset -- but fails all the same."""
+        root = tmp_path / "data"
+        shutil.copytree(mnist_npy, root / "mnist")
+
+        train = MNIST(root=root, image_set="train", as_datamaite=True)
+        test = MNIST(root=root, image_set="test", as_datamaite=True)
+
+        assert len(train.samples) == 100
+        assert len(test.samples) == 20
