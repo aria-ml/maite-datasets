@@ -2,7 +2,10 @@ from __future__ import annotations
 
 __all__ = []
 
+import json
+from collections import Counter
 from collections.abc import Sequence
+from functools import partial
 from pathlib import Path
 from typing import Any, Literal
 
@@ -16,7 +19,126 @@ from maite_datasets._base import (
     NumpyImageClassificationTransform,
     _merge_datum_metadata,
 )
-from maite_datasets._fileio import HFResource, ResourcePart
+from maite_datasets._fileio import HFParquetResource, HFResource, ResourcePart, _hf_list_files
+
+
+def _import_parquet() -> Any:
+    """The parquet reader, or an ImportError explaining how to get it.
+
+    Raising rather than degrading silently is deliberate: this module is reached
+    through a mirror, so the exception is what hands the download back to the plain
+    file-tree :class:`HFResource` listed behind it.
+    """
+    try:
+        import pyarrow.parquet as parquet
+    except ImportError as e:
+        raise ImportError(
+            "pyarrow is required to restore MilitaryVehicles from its parquet conversion; "
+            "install maite-datasets[hf] for the fast download path."
+        ) from e
+    return parquet
+
+
+def _fine_tree_index(listing: Sequence[str], prefix: str) -> set[tuple[str, str]]:
+    """``(class directory, filename)`` for every image the repo publishes under `prefix`."""
+    entries: set[tuple[str, str]] = set()
+    for path in listing:
+        parts = path.split("/")
+        if len(parts) == 3 and parts[0] == prefix and parts[2].lower().endswith(".jpg"):
+            entries.add((parts[1], parts[2]))
+    return entries
+
+
+def _coarse_mapping(
+    index2label: dict[int, str],
+    categories: dict[str, list[str]],
+) -> tuple[dict[int, str], list[int]]:
+    """The coarse labeling implied by `categories`, plus a fine-id to coarse-id lookup.
+
+    Ids are assigned alphabetically, which is the order the source repo's own
+    ``*_true_coarse.npy`` uses, so a coarse label here means the same integer it does
+    upstream. ``BMD`` and ``MT LB`` are categories of one and so appear in both
+    labelings under the same name.
+    """
+    names = sorted(categories)
+    fine2category = {member: category for category, members in categories.items() for member in members}
+    missing = set(index2label.values()) - set(fine2category)
+    if missing:
+        raise ValueError(f"hierarchy does not place {sorted(missing)} in a category.")
+    return dict(enumerate(names)), [names.index(fine2category[index2label[i]]) for i in sorted(index2label)]
+
+
+def _materialize_fine_tree(
+    parquet_files: Sequence[Path],
+    directory: Path,
+    *,
+    repo_id: str,
+    index2label: dict[int, str],
+) -> None:
+    """Rebuild the ``{split}_fine`` image tree from the hub's parquet conversion.
+
+    The conversion collapsed the repo's four top-level directories into one config, so
+    every image appears twice -- once under its fine class and once under its coarse
+    category -- and ``image.path`` is a bare filename that does not say which. The split
+    is recovered by matching each row against the repo's own file listing: a row is fine
+    exactly when ``{split}_fine/<label>/<path>`` is a file that exists upstream. That is
+    decisive (measured: every row matches one side and no row matches both) and costs one
+    listing request, where deriving it from the rows alone would mean hashing 165 MB of
+    image bytes to pair the duplicates back up.
+    """
+    parquet = _import_parquet()
+    listing = _hf_list_files(repo_id)
+
+    for parquet_file in sorted(parquet_files):
+        # ``default/<split>/0000.parquet`` -- the config is flat, the split is the parent.
+        split = parquet_file.parent.name
+        expected = _fine_tree_index(listing, f"{split}_fine")
+        target = directory / f"{split}_fine"
+        if not expected:
+            raise RuntimeError(f"{repo_id} publishes no {split}_fine images; the parquet conversion cannot be split.")
+
+        # Class directories from the listing become filesystem paths below, so they are
+        # checked against what this class declares rather than trusted. That also catches
+        # the repo gaining, losing or renaming a class out from under index2label.
+        declared = {label.replace(" ", "_") for label in index2label.values()}
+        undeclared = {class_dir for class_dir, _ in expected} - declared
+        if undeclared:
+            raise RuntimeError(f"{split}_fine holds classes {sorted(undeclared)} that {__name__} does not declare.")
+
+        reader = parquet.ParquetFile(parquet_file)
+        names = json.loads(reader.schema_arrow.metadata[b"huggingface"])["info"]["features"]["label"]["names"]
+
+        written: set[tuple[str, str]] = set()
+        # Batched rather than one read_table: the train conversion is 136 MB of image
+        # blobs, and nothing here needs more than a row at a time.
+        for batch in reader.iter_batches():
+            images = batch.column("image").to_pylist()
+            labels = batch.column("label").to_pylist()
+            for image, label in zip(images, labels):
+                key = (names[label], image["path"])
+                if key not in expected:
+                    continue
+                destination = target / key[0] / key[1]
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(image["bytes"])
+                written.add(key)
+
+        if written != expected:
+            raise RuntimeError(
+                f"Restoring {split}_fine from parquet recovered {len(written)} of {len(expected)} images. "
+                "The conversion no longer matches the repo it was generated from."
+            )
+
+        # ``{split}_true_fine.npy`` is not in the conversion -- it is not an image, so the
+        # hub dropped it. Upstream's own copy is simply each class index repeated by that
+        # class's file count (verified: non-decreasing, 24 distinct values), which is what
+        # _load_data_inner's positional pairing against a class-ordered walk requires.
+        counts = Counter(class_dir for class_dir, _ in written)
+        targets = np.repeat(
+            np.fromiter(index2label, dtype=np.int64),
+            [counts[label.replace(" ", "_")] for label in index2label.values()],
+        )
+        np.save(target / f"{split}_true_fine.npy", targets, allow_pickle=False)
 
 
 class MilitaryVehicles(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
@@ -143,18 +265,72 @@ class MilitaryVehicles(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
         verbose: bool = False,
         lazy: bool = False,
         *,
+        labels: Literal["fine", "coarse"] = "fine",
         as_datamaite: bool = False,
     ) -> None:
+        if labels not in ("fine", "coarse"):
+            raise ValueError(f"labels must be 'fine' or 'coarse', got {labels!r}.")
+        self._labels: Literal["fine", "coarse"] = labels
+
+        # The images on disk are always the fine tree, whichever labeling is asked for,
+        # so the fine mapping is kept separately: it is what names the class directories.
+        self._fine_index2label = type(self).index2label
+        self._fine_label2index = {v: k for k, v in self._fine_index2label.items()}
+        coarse_index2label, self._fine_to_coarse = _coarse_mapping(
+            self._fine_index2label, self.hierarchy["vehicle"]["military"]["land vehicle"]
+        )
+        if labels == "coarse":
+            # Shadows the class attribute for this instance only, before the base class
+            # reads it -- label2index, metadata and the one-hot width all follow from it.
+            self.index2label = coarse_index2label
+
         super().__init__(root, image_set, transforms, download, verbose, lazy, as_datamaite=as_datamaite)
+
+    @property
+    def labels(self) -> Literal["fine", "coarse"]:
+        """Which labeling ``index2label`` and each datum's target describe.
+
+        Fixed at construction: a dataset that could change labeling underneath a wrapper
+        would leave the wrapper holding a stale ``index2label`` and target width.
+        """
+        return self._labels
 
     def _load_data(self) -> tuple[list[str], Sequence[int], dict[str, Any]]:
         # Only the selected image set is worth fetching, and the pattern that expresses
         # that depends on self.image_set -- so the part is narrowed here rather than
         # declared statically on the class.
+        #
+        # Two mirrors of the same images. The hub's parquet conversion is a couple of
+        # files where the file tree is thousands, which without a token (one worker, to
+        # stay under the anonymous rate limit) is the difference between a minute and the
+        # better part of an hour. It is an auto-generated branch though, so the tree it
+        # was generated from stays behind it: anything the recovery cannot vouch for
+        # raises, and _download_part falls through.
         image_sets = ["train", "test"] if self.image_set == "base" else [self.image_set]
         self._resource = ResourcePart(
             "military_vehicles",
-            (HFResource(repo_id=self._repo_id, allow_patterns=[f"{img_set}_fine/*" for img_set in image_sets]),),
+            (
+                HFParquetResource(
+                    repo_id=self._repo_id,
+                    materialize=partial(
+                        _materialize_fine_tree,
+                        repo_id=self._repo_id,
+                        index2label=self._fine_index2label,
+                    ),
+                    allow_patterns=[f"default/{img_set}/*" for img_set in image_sets],
+                ),
+                HFResource(
+                    repo_id=self._repo_id,
+                    # The jpgs and the targets file, which is everything the loader reads.
+                    # A bare ``{img_set}_fine/*`` also drags down 20 per-class
+                    # binary_true.npy files and a zip that nothing here opens.
+                    allow_patterns=[
+                        pattern
+                        for img_set in image_sets
+                        for pattern in (f"{img_set}_fine/*/*.jpg", f"{img_set}_fine/{img_set}_true_fine.npy")
+                    ],
+                ),
+            ),
         )
         return super()._load_data()
 
@@ -170,10 +346,22 @@ class MilitaryVehicles(BaseICDataset[NumpyArray], BaseDatasetNumpyMixin):
                 raise FileNotFoundError
             annotations: NDArray = np.load(annotations_path)
             targets.extend(annotations.tolist())
-            for group in self._label2index:
+            for group in self._fine_label2index:
                 data, file_data = self._load_group(img_set, group)
                 filepaths.extend(data)
                 _merge_datum_metadata(datum_metadata, file_data)
+
+        # Targets come from the .npy and filepaths from walking the tree, paired by
+        # position -- so a tree that is short by one file relabels everything after the
+        # gap rather than failing. FileNotFoundError is the type _load_data retries a
+        # download on, which is the right recovery for a half-fetched tree.
+        if len(filepaths) != len(targets):
+            raise FileNotFoundError(
+                f"{self.path} holds {len(filepaths)} images but {len(targets)} targets; the download is incomplete."
+            )
+
+        if self._labels == "coarse":
+            targets = [self._fine_to_coarse[target] for target in targets]
 
         return filepaths, targets, datum_metadata
 

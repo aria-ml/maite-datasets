@@ -502,3 +502,21 @@ def seadrone_fake(tmp_path_factory):
         with open(ann_temp / f"instances_{grp}.json", mode="w") as f:
             json.dump(annotation, f)
     yield temp
+
+
+@pytest.fixture(scope="session")
+def military_vehicles_fake(tmp_path_factory):
+    """One image per fine class in each split, laid out the way the loader expects."""
+    from maite_datasets.image_classification._military_vehicles import MilitaryVehicles
+
+    temp = tmp_path_factory.mktemp("data")
+    base = temp / "militaryvehicles"
+    groups = list(MilitaryVehicles.index2label.values())
+    for split in ("train", "test"):
+        split_dir = base / f"{split}_fine"
+        for i, group in enumerate(groups):
+            group_dir = split_dir / group.replace(" ", "_")
+            group_dir.mkdir(parents=True, exist_ok=True)
+            Image.fromarray(np.ones((10, 10, 3), dtype=np.uint8)).save(group_dir / f"{i:05}.jpg")
+        np.save(split_dir / f"{split}_true_fine.npy", np.arange(len(groups)))
+    yield temp

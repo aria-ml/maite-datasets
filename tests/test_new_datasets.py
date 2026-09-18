@@ -102,21 +102,6 @@ def military_aircraft_fake(tmp_path_factory):
     yield temp
 
 
-@pytest.fixture(scope="session")
-def military_vehicles_fake(tmp_path_factory):
-    temp = tmp_path_factory.mktemp("data")
-    base = temp / "militaryvehicles"
-    groups = list(MilitaryVehicles.index2label.values())
-    for split in ("train", "test"):
-        split_dir = base / f"{split}_fine"
-        for i, group in enumerate(groups):
-            group_dir = split_dir / group.replace(" ", "_")
-            group_dir.mkdir(parents=True, exist_ok=True)
-            _save_image(group_dir / f"{i:05}.jpg")
-        np.save(split_dir / f"{split}_true_fine.npy", np.arange(len(groups)))
-    yield temp
-
-
 @pytest.fixture
 def droneswarm_fake(tmp_path):
     base = tmp_path / "droneswarm"
