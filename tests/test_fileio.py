@@ -12,6 +12,7 @@ from maite_datasets._fileio import (
     HF_DOWNLOAD_FLAGS,
     HF_MAX_WORKERS_ANONYMOUS,
     HF_MAX_WORKERS_AUTHENTICATED,
+    HFParquetResource,
     HFResource,
     ResourcePart,
     URLResource,
@@ -227,6 +228,63 @@ class TestHFResource:
         """HF unpacks a file tree, so there is no archive filename to hand back."""
         with pytest.raises(TypeError, match="fetched from huggingface"):
             _part_filename(ResourcePart("example", (HFResource("owner/name"),)))
+
+
+class TestHFParquetResource:
+    def test_download_false_raises_without_touching_the_hub(self, monkeypatch, tmp_path):
+        def fail(*args, **kwargs):
+            raise AssertionError("should not reach the hub")
+
+        monkeypatch.setattr("maite_datasets._fileio._hf_snapshot", fail)
+        with pytest.raises(FileNotFoundError, match="owner/name has not been downloaded"):
+            _ensure_exists(HFParquetResource("owner/name", lambda files, directory: None), tmp_path, tmp_path, False)
+
+    def test_stages_the_parquet_then_hands_it_to_materialize(self, monkeypatch, tmp_path):
+        """The conversion branch is fetched to a staging dir; the caller turns it into a file tree."""
+        seen = {}
+
+        def fake_snapshot(repo_id, repo_type, local_dir, allow_patterns=None, revision=None, verbose=False):
+            seen["revision"] = revision
+            seen["patterns"] = allow_patterns
+            staged = Path(local_dir) / "default" / "train"
+            staged.mkdir(parents=True)
+            (staged / "0000.parquet").write_bytes(b"parquet bytes")
+            seen["staging"] = Path(local_dir)
+
+        def materialize(files, directory):
+            seen["files"] = sorted(f.name for f in files)
+            seen["contents"] = files[0].read_bytes()
+            seen["directory"] = directory
+
+        monkeypatch.setattr("maite_datasets._fileio._hf_snapshot", fake_snapshot)
+        _ensure_exists(
+            HFParquetResource("owner/name", materialize, allow_patterns=["default/train/*"]),
+            tmp_path,
+            tmp_path,
+            True,
+        )
+
+        assert seen["revision"] == "refs/convert/parquet"
+        assert seen["patterns"] == ["default/train/*"]
+        assert seen["files"] == ["0000.parquet"]
+        assert seen["contents"] == b"parquet bytes"
+        assert seen["directory"] == tmp_path
+        assert not seen["staging"].exists(), "staging dir should not outlive a successful materialize"
+
+    def test_a_failed_materialize_propagates_so_the_next_mirror_runs(self, monkeypatch, tmp_path):
+        """Recovery that cannot be trusted must not look like a successful download."""
+
+        def fake_snapshot(repo_id, repo_type, local_dir, allow_patterns=None, revision=None, verbose=False):
+            staged = Path(local_dir) / "default" / "train"
+            staged.mkdir(parents=True)
+            (staged / "0000.parquet").write_bytes(b"parquet bytes")
+
+        def materialize(files, directory):
+            raise RuntimeError("recovered 3 images, expected 7")
+
+        monkeypatch.setattr("maite_datasets._fileio._hf_snapshot", fake_snapshot)
+        with pytest.raises(RuntimeError, match="expected 7"):
+            _ensure_exists(HFParquetResource("owner/name", materialize), tmp_path, tmp_path, True)
 
 
 @pytest.mark.optional
@@ -559,20 +617,21 @@ class TestHFExtract:
         """Patch in a fake hub, returning the record of snapshot_download calls."""
         calls = []
 
-        def fake_snapshot(repo_id, repo_type, local_dir, allow_patterns, max_workers):
+        def fake_snapshot(repo_id, repo_type, local_dir, allow_patterns, revision, max_workers):
             calls.append(
                 {
                     "repo_id": repo_id,
                     "repo_type": repo_type,
                     "local_dir": local_dir,
                     "patterns": allow_patterns,
+                    "revision": revision,
                     "workers": max_workers,
                 }
             )
 
         def make_api(filelist):
             class FakeApi:
-                def list_repo_files(self, repo_id, repo_type):
+                def list_repo_files(self, repo_id, repo_type, revision=None):
                     return filelist
 
             monkeypatch.setattr("maite_datasets._fileio.HfApi", FakeApi)
@@ -608,6 +667,7 @@ class TestHFExtract:
                 "repo_type": "dataset",
                 "local_dir": tmp_path,
                 "patterns": "train/*",
+                "revision": None,
                 "workers": HF_MAX_WORKERS_ANONYMOUS,
             }
         ]
@@ -639,7 +699,7 @@ class TestHFExtract:
                 raise ConnectionError("Network error: HTTP status client error (429 Too Many Requests)")
 
         class FakeApi:
-            def list_repo_files(self, repo_id, repo_type):
+            def list_repo_files(self, repo_id, repo_type, revision=None):
                 return ["a.png"]
 
         monkeypatch.setattr("maite_datasets._fileio.HfApi", FakeApi)
@@ -658,7 +718,7 @@ class TestHFExtract:
             raise ConnectionError("429 Too Many Requests")
 
         class FakeApi:
-            def list_repo_files(self, repo_id, repo_type):
+            def list_repo_files(self, repo_id, repo_type, revision=None):
                 return ["a.png"]
 
         monkeypatch.setattr("maite_datasets._fileio.HfApi", FakeApi)

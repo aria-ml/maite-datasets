@@ -9,7 +9,7 @@ import shutil
 import tarfile
 import time
 import zipfile
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from fnmatch import fnmatchcase
 from pathlib import Path
@@ -76,7 +76,31 @@ class HFResource(NamedTuple):
     allow_patterns: list[str] | str | None = None
 
 
-Resource: TypeAlias = URLResource | HFResource
+class HFParquetResource(NamedTuple):
+    """A huggingface repo fetched through its parquet auto-conversion rather than file by file.
+
+    The hub republishes every dataset repo on ``refs/convert/parquet`` as a handful of
+    parquet files, so a repo of thousands of loose images costs two or three requests
+    instead of one per image. What it gives back is ``(bytes, label)`` rows rather than a
+    file tree, and reconstituting the tree needs knowledge this module does not have --
+    which rows belong to the wanted labeling, what each file should be called. So the
+    transport lives here and `materialize` supplies the rest, receiving the staged
+    parquet files and the directory the tree belongs in.
+
+    Anything `materialize` raises propagates, which is what makes this safe to list
+    ahead of the plain :class:`HFResource` in a part's mirrors: recovery it cannot
+    vouch for reads as a failed download, and :func:`_download_part` moves on to the
+    file tree.
+    """
+
+    repo_id: str
+    materialize: Callable[[list[Path], Path], None]
+    repo_type: Literal["dataset", "model"] = "dataset"
+    revision: str = "refs/convert/parquet"
+    allow_patterns: list[str] | str | None = None
+
+
+Resource: TypeAlias = URLResource | HFResource | HFParquetResource
 
 
 class ResourcePart(NamedTuple):
@@ -252,6 +276,34 @@ def _extract_archive(
             _extract_zip_archive(child, directory)
 
 
+def _ensure_hf_exists(
+    resource: HFResource | HFParquetResource,
+    directory: Path,
+    download: bool = True,
+    verbose: bool = False,
+) -> None:
+    """Fetch a huggingface-hosted `resource` into `directory`.
+
+    Neither kind is an archive with a checksum to fall back on, so "already there" is
+    not something this can decide -- the hub client is what skips files it already
+    holds, and both paths go through it on every call.
+    """
+    if not download:
+        raise FileNotFoundError(
+            "Data could not be loaded with the provided root directory, "
+            f"the huggingface repo {resource.repo_id} has not been downloaded, "
+            "and the download parameter is set to False."
+        )
+
+    if isinstance(resource, HFParquetResource):
+        _print(f"Downloading {resource.repo_id} from huggingface ({resource.revision})", verbose)
+        _hf_parquet_extract(resource, directory, verbose)
+        return
+
+    _print(f"Downloading {resource.repo_id} from huggingface", verbose)
+    _hf_extract(resource.repo_id, resource.repo_type, directory, resource.allow_patterns, verbose)
+
+
 def _ensure_exists(
     resource: Resource,
     directory: Path,
@@ -266,15 +318,8 @@ def _ensure_exists(
     Takes the whole :class:`URLResource` rather than its fields so growing the tuple
     never silently shifts the positional arguments that follow it.
     """
-    if isinstance(resource, HFResource):
-        if not download:
-            raise FileNotFoundError(
-                "Data could not be loaded with the provided root directory, "
-                f"the huggingface repo {resource.repo_id} has not been downloaded, "
-                "and the download parameter is set to False."
-            )
-        _print(f"Downloading {resource.repo_id} from huggingface", verbose)
-        _hf_extract(resource.repo_id, resource.repo_type, directory, resource.allow_patterns, verbose)
+    if isinstance(resource, (HFResource, HFParquetResource)):
+        _ensure_hf_exists(resource, directory, download, verbose)
         return
 
     url, filename, md5, checksum = resource
@@ -396,7 +441,7 @@ def _part_filename(part: ResourcePart) -> str:
     no single archive to name.
     """
     primary = part.mirrors[0]
-    if isinstance(primary, HFResource):
+    if isinstance(primary, (HFResource, HFParquetResource)):
         raise TypeError(f"{part.name} is fetched from huggingface and has no archive filename.")
     return primary.filename
 
@@ -453,51 +498,45 @@ def _remove_folder_nest(directory: str | Path, overwrite: bool = False, verbose:
         _print(f"The following files were not moved:\n\t{(', '.join(not_moved))}", verbose)
 
 
-def _hf_extract(
+def _require_hf() -> None:
+    """Fail with an actionable message when the optional hub client is missing."""
+    if HfApi is None or snapshot_download is None or get_token is None:
+        raise ImportError(
+            "huggingface-hub is a required library to download from huggingface. "
+            "Either download maite-datasets[hf] or pip install huggingface-hub."
+        )
+
+
+def _hf_list_files(
+    repo_id: str,
+    repo_type: Literal["dataset", "model"] = "dataset",
+    revision: str | None = None,
+) -> list[str]:
+    """Repo-relative paths of every file in `repo_id`, in one request."""
+    _require_hf()
+    assert HfApi is not None  # noqa: S101 -- narrowed by _require_hf
+    return list(HfApi().list_repo_files(repo_id=repo_id, repo_type=repo_type, revision=revision))
+
+
+def _hf_snapshot(
     repo_id: str,
     repo_type: Literal["dataset", "model"],
     local_dir: Path,
     allow_patterns: list[str] | str | None = None,
+    revision: str | None = None,
     verbose: bool = False,
 ) -> None:
-    """Downloads dataset from Huggingface to local_dir.
+    """Fetch `repo_id` into `local_dir`, retrying around the hub's rate limit.
 
-    ``allow_patterns`` are shell-style globs matched against the repo-relative file
-    paths (so ``*`` also spans ``/``); None selects every file. The listing here exists
-    only to report the count, and uses ``fnmatchcase`` to match how the hub filters the
-    same patterns, so the number reported is the number fetched.
+    Every attempt resumes from what is already on disk, so a dropped transfer costs
+    only the backoff. The retries catch OSError, which covers both the bare
+    ConnectionError the xet transfer layer raises on a 429 and HfHubHTTPError (a
+    requests.RequestException, and so an OSError too).
     """
-    if HfApi is None or snapshot_download is None or get_token is None:
-        raise ImportError(
-            "huggingface-hub is a required library to download from huggingface. "
-            "Either download maite-datasets[hf-hub] or pip install huggingface-hub."
-        )
-
-    api = HfApi()
-    filelist = api.list_repo_files(repo_id=repo_id, repo_type=repo_type)
-
-    patterns = [allow_patterns] if isinstance(allow_patterns, str) else allow_patterns
-    num_files = (
-        len(filelist)
-        if patterns is None
-        else sum(1 for f in filelist if any(fnmatchcase(f, pattern) for pattern in patterns))
-    )
-    extra = ". This may take a while ..." if num_files > 500 else " ..."
-    _print(f"Downloading {num_files} files{extra}", verbose)
+    _require_hf()
+    assert snapshot_download is not None and get_token is not None  # noqa: S101 -- narrowed by _require_hf
 
     authenticated = get_token() is not None
-    if not authenticated and num_files > 500:
-        _print(
-            "No huggingface token found, so files are fetched one at a time to stay under "
-            "the anonymous rate limit. Set HF_TOKEN (or run `huggingface-cli login`) to "
-            "download in parallel.",
-            verbose,
-        )
-
-    # Every attempt resumes from what is already on disk, so a dropped transfer costs
-    # only the backoff. The retries catch OSError, which covers both the bare
-    # ConnectionError the xet transfer layer raises on a 429 and HfHubHTTPError (a
-    # requests.RequestException, and so an OSError too).
     for attempt in range(HF_ATTEMPTS):
         try:
             with _hf_download_settings():
@@ -506,6 +545,7 @@ def _hf_extract(
                     repo_type=repo_type,
                     local_dir=local_dir,
                     allow_patterns=allow_patterns,
+                    revision=revision,
                     max_workers=HF_MAX_WORKERS_AUTHENTICATED if authenticated else HF_MAX_WORKERS_ANONYMOUS,
                 )
             return
@@ -525,3 +565,72 @@ def _hf_extract(
             delay = HF_RETRY_BACKOFF * 2**attempt
             _print(f"Download interrupted ({e}); resuming in {delay:.0f}s ...", verbose)
             time.sleep(delay)
+
+
+# Where a parquet conversion is staged inside the dataset folder while it is being
+# turned back into a file tree. Named rather than a tempdir so an interrupted run
+# resumes the transfer instead of re-fetching it, and removed once the tree exists.
+HF_PARQUET_STAGING = "_parquet"
+
+
+def _hf_parquet_extract(resource: HFParquetResource, directory: Path, verbose: bool = False) -> None:
+    """Fetch `resource`'s parquet conversion and let it rebuild the file tree in `directory`."""
+    staging = directory / HF_PARQUET_STAGING
+    _hf_snapshot(
+        resource.repo_id,
+        resource.repo_type,
+        staging,
+        resource.allow_patterns,
+        resource.revision,
+        verbose,
+    )
+    files = sorted(staging.rglob("*.parquet"))
+    if not files:
+        raise FileNotFoundError(
+            f"The {resource.revision} branch of {resource.repo_id} served no parquet files"
+            f"{f' matching {resource.allow_patterns}' if resource.allow_patterns else ''}."
+        )
+    _print(f"Restoring {len(files)} parquet file(s) to an image tree ...", verbose)
+    resource.materialize(files, directory)
+    # Only on success: a staging dir left behind after a failure is what lets the next
+    # run resume the transfer rather than pay for it again.
+    shutil.rmtree(staging, ignore_errors=True)
+
+
+def _hf_extract(
+    repo_id: str,
+    repo_type: Literal["dataset", "model"],
+    local_dir: Path,
+    allow_patterns: list[str] | str | None = None,
+    verbose: bool = False,
+) -> None:
+    """Downloads dataset from Huggingface to local_dir.
+
+    ``allow_patterns`` are shell-style globs matched against the repo-relative file
+    paths (so ``*`` also spans ``/``); None selects every file. The listing here exists
+    only to report the count, and uses ``fnmatchcase`` to match how the hub filters the
+    same patterns, so the number reported is the number fetched.
+    """
+    _require_hf()
+    assert get_token is not None  # noqa: S101 -- narrowed by _require_hf
+
+    filelist = _hf_list_files(repo_id, repo_type)
+
+    patterns = [allow_patterns] if isinstance(allow_patterns, str) else allow_patterns
+    num_files = (
+        len(filelist)
+        if patterns is None
+        else sum(1 for f in filelist if any(fnmatchcase(f, pattern) for pattern in patterns))
+    )
+    extra = ". This may take a while ..." if num_files > 500 else " ..."
+    _print(f"Downloading {num_files} files{extra}", verbose)
+
+    if get_token() is None and num_files > 500:
+        _print(
+            "No huggingface token found, so files are fetched one at a time to stay under "
+            "the anonymous rate limit. Set HF_TOKEN (or run `huggingface-cli login`) to "
+            "download in parallel.",
+            verbose,
+        )
+
+    _hf_snapshot(repo_id, repo_type, local_dir, allow_patterns, None, verbose)
