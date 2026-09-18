@@ -224,10 +224,15 @@ class TestHFResource:
         with pytest.raises(FileNotFoundError, match="owner/name has not been downloaded"):
             _ensure_exists(HFResource("owner/name"), tmp_path, tmp_path, False, False)
 
-    def test_part_filename_rejects_hf_mirrors(self):
+    @pytest.mark.parametrize(
+        "mirror",
+        [HFResource("owner/name"), HFParquetResource("owner/name", lambda files, directory: None)],
+        ids=["tree", "parquet"],
+    )
+    def test_part_filename_rejects_hf_mirrors(self, mirror):
         """HF unpacks a file tree, so there is no archive filename to hand back."""
         with pytest.raises(TypeError, match="fetched from huggingface"):
-            _part_filename(ResourcePart("example", (HFResource("owner/name"),)))
+            _part_filename(ResourcePart("example", (mirror,)))
 
 
 class TestHFParquetResource:
