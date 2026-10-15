@@ -18,7 +18,7 @@ stages:
 include:
   - component: gitlab.jatic.net/jatic/aria/ci/workflow-rules@0.6.0
     inputs:
-      runner_tags: ["autoscaler"]
+      runner_tags: ["k8s-small-cpu"]
 
   - component: gitlab.jatic.net/jatic/aria/ci/uv-nox@0.6.0
     inputs:
