@@ -31,7 +31,7 @@ include:
     inputs:
       job_name: typecheck
       session: type
-      tags: ["k8s-medium-cpu"]
+      tags: ["k8s-small-cpu"]
       stage: test
       python_versions: ["3.10", "3.11", "3.12", "3.13"]
       image: $UV_IMAGE:python$PYTHON_VERSION-$UV_BASE_LAYER
