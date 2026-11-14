@@ -1,6 +1,6 @@
 # Changelog for maite-datasets
 
-## Unreleased
+## v0.0.25
 
 - [feat] Add the VisDroneMOT multi-object tracking dataset, downloaded from the Voxel51 hub export
 
