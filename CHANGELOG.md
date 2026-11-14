@@ -1,5 +1,9 @@
 # Changelog for maite-datasets
 
+## Unreleased
+
+- [feat] Add the VisDroneMOT multi-object tracking dataset, downloaded from the Voxel51 hub export
+
 ## v0.0.24
 
 - [impr] Download MilitaryVehicles from its parquet conversion instead of file by file

@@ -40,6 +40,7 @@ Optional features are installed as extras, e.g. `pip install maite-datasets[tqdm
 | Detection      | SeaDrone         | A UAV dataset focused on open water object detection.                         |
 | Detection      | SkySeaLand       | [Satellite imagery][skysealand] of air, sea and land transportation.          |
 | Detection      | VOCDetection     | [Pascal VOC][voc] dataset.                                                    |
+| Tracking       | VisDroneMOT      | [Drone footage][visdrone] with tracked objects. Requires the `hf` extra.      |
 
 [cifar10]: https://www.cs.toronto.edu/~kriz/cifar.html
 [aircraft]: https://huggingface.co/datasets/Ahnuf/Military_Aircraft_Detection_Classification_Image_Dataset
@@ -49,12 +50,15 @@ Optional features are installed as extras, e.g. `pip install maite-datasets[tqdm
 [m3fd]: https://github.com/dlut-dimt/TarDAL
 [skysealand]: https://www.kaggle.com/datasets/mdzahidhasanriad/skysealand/data
 [voc]: http://host.robots.ox.ac.uk/pascal/VOC/
+[visdrone]: https://huggingface.co/datasets/Voxel51/visdrone-mot
 
 The paired RGB-infrared datasets (`DroneVehicle`, `M3FD`) stack the infrared channel onto the RGB image.
+`VisDroneMOT` is licensed for non-commercial use only (CC BY-NC-SA 3.0). Each of its datums is a whole video, so it
+takes no transforms and no `lazy` flag: frames are decoded only when their pixels are read.
 `MilitaryAircraft` and `MilitaryVehicles` expose a `hierarchy` attribute describing their class ontology.
 `MilitaryVehicles` also accepts `labels="coarse"` to label each image with one of the 7 categories in that
 hierarchy instead of its fine class; both labelings read the same images, so no second download is needed.
-Every dataset accepts `lazy=True` to defer image decoding until the image is actually read, which keeps
+Every image dataset accepts `lazy=True` to defer image decoding until the image is actually read, which keeps
 metadata-only passes over large datasets cheap.
 
 ### Usage
