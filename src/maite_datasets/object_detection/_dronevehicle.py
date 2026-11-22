@@ -38,17 +38,23 @@ class DroneVehicle(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[st
     There are 56,878 images (28,439 ir-rgb paired images): 17,990 image pairs in the train set,
     1,469 image pairs in the validation set, and 8,980 image pairs in the test set.
     The dataset has five classes - car, truck, bus, van, and freight car.
-    Ground-truth bounding boxes are provided in yolo format - (xc, yc, w, h) using normalized coordinates (0-1).
-    Because there are low-light conditions - there are separate annotations for both the rgb and ir versions
-    of the image. The images are 712 x 840 with a 100 pixel white border on all sides (artifact from annotating);
-    actual image size is 512 x 640, which will require cropping to get this size.
+    The annotations are rotated quadrilaterals; each target box is the axis-aligned extent of one, as
+    (x0, y0, x1, y1) in pixels. The images are 712 x 840 with a 100 pixel white border on all sides
+    (artifact from annotating); actual image size is 512 x 640, which will require cropping to get this size.
+
+    Because of low-light conditions, the RGB and infrared images have separate annotations. Each datum's image is
+    the RGB image with the first channel of its infrared pair stacked on it (4 channels), and the targets come from
+    the infrared annotations (``<split>labelr``). On the validation split the infrared annotations hold 24,490
+    boxes and the RGB annotations 22,463. Where both label an object they agree (96% of RGB boxes have an
+    infrared box at IoU 0.5 or more), but the infrared annotations label more objects, so a model that reads
+    only the RGB channels is scored on some targets the RGB annotations do not have.
 
     Parameters
     ----------
     root : str or pathlib.Path
         Root directory where the data should be downloaded to or
-        the ``m3fd`` folder of the already downloaded data.
-    image_set: "train", "val", or "base", default "train"
+        the ``dronevehicle`` folder of the already downloaded data.
+    image_set: "train", "val", "test" or "base", default "train"
         If "base", then the full dataset is selected (train, val and test).
     transforms : Transform, Sequence[Transform] or None, default None
         Transform(s) to apply to the data.
