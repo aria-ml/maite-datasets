@@ -193,6 +193,33 @@ class TestDroneVehicle:
         assert img.shape == (4, 10, 10)
         assert datum_meta["rgb_filename"] == "rgb_00001.jpg"
 
+    def test_dronevehicle_box_forms(self, dronevehicle_fake, tmp_path):
+        """A bndbox object is read as given; a point, or a polygon whose corners coincide, is dropped and counted."""
+        dataset = DroneVehicle(root=dronevehicle_fake)
+        annotation = tmp_path / "trainlabelr" / "00000.xml"
+        annotation.parent.mkdir()
+        (tmp_path / "trainlabel").mkdir()
+        (tmp_path / "trainlabel" / "00000.xml").write_text(DRONEVEHICLE_RGB_ANNOTATION)
+        extra = """
+    <object>
+        <name>car</name>
+        <bndbox><xmin>5</xmin><ymin>6</ymin><xmax>15</xmax><ymax>16</ymax></bndbox>
+    </object>
+    <object>
+        <name>car</name>
+        <point><x>7</x><y>8</y></point>
+    </object>
+    <object>
+        <name>car</name>
+        <polygon><x1>9</x1><y1>9</y1><x2>9</x2><y2>9</y2><x3>9</x3><y3>9</y3><x4>9</x4><y4>9</y4></polygon>
+    </object>
+</annotation>"""
+        annotation.write_text(DRONEVEHICLE_IR_ANNOTATION.replace("</annotation>", extra))
+        boxes, labels, meta = dataset._read_annotations(str(annotation))
+        assert boxes == [[10, 20, 40, 60], [5, 6, 15, 16]]
+        assert labels == [4, dataset._label2index["car"]]
+        assert meta["dropped_points"] == 2
+
 
 @pytest.mark.optional
 class TestMilitaryAircraftObjectDetection:

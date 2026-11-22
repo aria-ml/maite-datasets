@@ -1,5 +1,9 @@
 # Changelog for maite-datasets
 
+## Unreleased
+
+- [fix] Read DroneVehicle's axis-aligned box annotations, which came back as zero boxes, and drop annotations with no extent
+
 ## v0.0.26
 
 - [docs] Say that DroneVehicle's targets come from its infrared annotations, and correct its box format

@@ -38,14 +38,16 @@ class DroneVehicle(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[st
     There are 56,878 images (28,439 ir-rgb paired images): 17,990 image pairs in the train set,
     1,469 image pairs in the validation set, and 8,980 image pairs in the test set.
     The dataset has five classes - car, truck, bus, van, and freight car.
-    The annotations are rotated quadrilaterals; each target box is the axis-aligned extent of one, as
-    (x0, y0, x1, y1) in pixels. The images are 712 x 840 with a 100 pixel white border on all sides
+    Most annotations are rotated quadrilaterals, and a target box is the axis-aligned extent of one; the rest are
+    axis-aligned boxes, read as given. Boxes are (x0, y0, x1, y1) in pixels. A few annotations have no extent (a
+    single point, or a polygon whose corners coincide): they are dropped, and each datum's ``dropped_points`` counts
+    them. The images are 712 x 840 with a 100 pixel white border on all sides
     (artifact from annotating); actual image size is 512 x 640, which will require cropping to get this size.
 
     Because of low-light conditions, the RGB and infrared images have separate annotations. Each datum's image is
     the RGB image with the first channel of its infrared pair stacked on it (4 channels), and the targets come from
     the infrared annotations (``<split>labelr``). On the validation split the infrared annotations hold 24,490
-    boxes and the RGB annotations 22,463. Where both label an object they agree (96% of RGB boxes have an
+    objects and the RGB annotations 22,463. Where both label an object they agree (96% of RGB boxes have an
     infrared box at IoU 0.5 or more), but the infrared annotations label more objects, so a model that reads
     only the RGB channels is scored on some targets the RGB annotations do not have.
 
@@ -186,13 +188,25 @@ class DroneVehicle(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[st
             "image_height": int(root.findtext("size/height", default="-1")),
             "image_depth": int(root.findtext("size/depth", default="-1")),
         }
+        dropped_points = 0
         for obj in root.findall("object"):
             name = obj.findtext("name", default="").replace("feright", "freight").replace("_", " ")
+            box: list[float]
+            if obj.find("polygon") is not None:
+                # A rotated quadrilateral: take its axis-aligned extent.
+                xs = [int(obj.findtext(f"polygon/x{corner}", default="0")) for corner in range(1, 5)]
+                ys = [int(obj.findtext(f"polygon/y{corner}", default="0")) for corner in range(1, 5)]
+                box = [min(xs), min(ys), max(xs), max(ys)]
+            elif obj.find("bndbox") is not None:
+                box = [int(obj.findtext(f"bndbox/{k}", default="0")) for k in ("xmin", "ymin", "xmax", "ymax")]
+            else:
+                box = []
+            if not box or box[2] <= box[0] or box[3] <= box[1]:  # a point, or corners that coincide: no extent
+                dropped_points += 1
+                continue
+            boxes.append(box)
             text_labels.append(name)
-            # Annotations are rotated quadrilaterals; take their axis-aligned extent.
-            xs = [int(obj.findtext(f"polygon/x{corner}", default="0")) for corner in range(1, 5)]
-            ys = [int(obj.findtext(f"polygon/y{corner}", default="0")) for corner in range(1, 5)]
-            boxes.append([min(xs), min(ys), max(xs), max(ys)])
+        additional_meta["dropped_points"] = dropped_points
 
         labels = [self._label2index[lbl] for lbl in text_labels]
 
