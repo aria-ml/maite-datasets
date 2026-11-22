@@ -1,6 +1,6 @@
 # Changelog for maite-datasets
 
-## Unreleased
+## v0.0.27
 
 - [fix] Read DroneVehicle's axis-aligned box annotations, which came back as zero boxes, and drop annotations with no extent
 
