@@ -1,6 +1,6 @@
 # Changelog for maite-datasets
 
-## Unreleased
+## v0.0.26
 
 - [docs] Say that DroneVehicle's targets come from its infrared annotations, and correct its box format
 
