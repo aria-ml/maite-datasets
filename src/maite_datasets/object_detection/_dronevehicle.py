@@ -37,12 +37,20 @@ class DroneVehicle(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[st
 
     There are 56,878 images (28,439 ir-rgb paired images): 17,990 image pairs in the train set,
     1,469 image pairs in the validation set, and 8,980 image pairs in the test set.
-    The dataset has five classes - car, truck, bus, van, and freight car.
+    The infrared labels use eight class names, read as written: car, truck, bus, van, ``*``, ``feright``,
+    ``feright car`` and ``feright_car`` (see ``index2label``).
     Most annotations are rotated quadrilaterals, and a target box is the axis-aligned extent of one; the rest are
-    axis-aligned boxes, read as given. Boxes are (x0, y0, x1, y1) in pixels. A few annotations have no extent (a
-    single point, or a polygon whose corners coincide): they are dropped, and each datum's ``dropped_points`` counts
-    them. The images are 712 x 840 with a 100 pixel white border on all sides
+    axis-aligned boxes, read as given. Boxes are (x0, y0, x1, y1) in pixels. Every annotation is kept, including the
+    few with no extent: a single point (x, y) becomes the zero-area box (x, y, x, y), and a polygon whose corners
+    coincide gives a box of zero width or height. An object with no polygon, box or point raises ``ValueError``.
+    The images are 712 x 840 with a 100 pixel white border on all sides
     (artifact from annotating); actual image size is 512 x 640, which will require cropping to get this size.
+    In the published archive 28 train image files are empty (0 bytes), 11 RGB and 17 infrared, and 8 are
+    truncated, 3 RGB and 5 infrared. A datum whose RGB or infrared file is empty, or is a JPEG that PIL reports
+    as truncated ("image file is truncated"), returns a 4 x 0 x 0 ``uint8`` image with its boxes, labels and
+    metadata. Any other read error raises. If ``PIL.ImageFile.LOAD_TRUNCATED_IMAGES`` is set, PIL fills the missing
+    rows of a truncated file with gray instead, and those pixels are returned. A transform, a model or an IoU may
+    fail on a zero-size image, or on a zero-area box.
 
     Because of low-light conditions, the RGB and infrared images have separate annotations. Each datum's image is
     the RGB image with the first channel of its infrared pair stacked on it (4 channels), and the targets come from
@@ -66,9 +74,10 @@ class DroneVehicle(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[st
     verbose : bool, default False
         If True, outputs print statements.
     lazy : bool, default False
-        When True, the image element of each datum is returned as a
-        :class:`LazyArray` that defers PIL decode until first numpy access.
-        Useful for metadata-only iteration over large image folders.
+        Each image is decoded when its datum is read, in either mode, because the RGB and infrared images are
+        stacked into one array. When True and every transform takes only an image, the transforms run on each of
+        the two images before the stack, and not at all on a zero-size image; with a transform that takes the
+        whole datum, they all run on the stacked image, as when False.
 
     Attributes
     ----------
@@ -77,7 +86,11 @@ class DroneVehicle(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[st
     image_set : "train", "val", "test" or "base"
         The selected image set from the dataset.
     index2label : dict[int, str]
-        Dictionary which translates from class integers to the associated class strings.
+        Dictionary which translates from class integers to the associated class strings. It holds the eight names
+        the published infrared labels use, as written, and is the same for every split: ``{0: "car", 1: "truck",
+        2: "bus", 3: "van", 4: "*", 5: "feright", 6: "feright car", 7: "feright_car"}``. Only the train split
+        holds ``*`` and ``feright`` (one box each). ``feright car`` and ``feright_car`` are two spellings of the
+        published class freight car. A name outside this list raises ``ValueError``.
     label2index : dict[str, int]
         Dictionary which translates from class strings to the associated class integers.
     metadata : DatasetMetadata
@@ -106,12 +119,17 @@ class DroneVehicle(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[st
         ),
     ]
 
+    # The names the published infrared labels use, as written. No name is corrected, so the data reaches the
+    # user as published; one list for every split keeps a class's index the same in all of them.
     index2label: dict[int, str] = {
         0: "car",
         1: "truck",
         2: "bus",
         3: "van",
-        4: "freight car",
+        4: "*",
+        5: "feright",
+        6: "feright car",
+        7: "feright_car",
     }
 
     def __init__(
@@ -188,9 +206,8 @@ class DroneVehicle(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[st
             "image_height": int(root.findtext("size/height", default="-1")),
             "image_depth": int(root.findtext("size/depth", default="-1")),
         }
-        dropped_points = 0
         for obj in root.findall("object"):
-            name = obj.findtext("name", default="").replace("feright", "freight").replace("_", " ")
+            name = obj.findtext("name", default="")
             box: list[float]
             if obj.find("polygon") is not None:
                 # A rotated quadrilateral: take its axis-aligned extent.
@@ -199,15 +216,23 @@ class DroneVehicle(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[st
                 box = [min(xs), min(ys), max(xs), max(ys)]
             elif obj.find("bndbox") is not None:
                 box = [int(obj.findtext(f"bndbox/{k}", default="0")) for k in ("xmin", "ymin", "xmax", "ymax")]
+            elif obj.find("point") is not None:
+                # A single point, as published: kept as a zero-area box so no annotation is lost.
+                x, y = obj.findtext("point/x"), obj.findtext("point/y")
+                if x is None or y is None:
+                    raise ValueError(f"{annotation} has a point named {name!r} without both an x and a y")
+                box = [int(x), int(y), int(x), int(y)]
             else:
-                box = []
-            if not box or box[2] <= box[0] or box[3] <= box[1]:  # a point, or corners that coincide: no extent
-                dropped_points += 1
-                continue
+                raise ValueError(f"{annotation} has an object named {name!r} with no polygon, bndbox or point")
             boxes.append(box)
             text_labels.append(name)
-        additional_meta["dropped_points"] = dropped_points
 
+        unknown = sorted({lbl for lbl in text_labels if lbl not in self._label2index})
+        if unknown:
+            raise ValueError(
+                f"{annotation} names the class {unknown[0]!r}, which is not one of the names the published "
+                f"infrared labels use: {list(self.index2label.values())}"
+            )
         labels = [self._label2index[lbl] for lbl in text_labels]
 
         # Paired RGB annotation: <split>labelr/x.xml -> <split>label/x.xml, built from
@@ -235,11 +260,23 @@ class DroneVehicle(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[st
         # Grab the bounding boxes and labels from the annotations
         annotation = self._targets[index]
         boxes, labels, additional_metadata = self._read_annotations(annotation)
-        # Stack the paired IR channel onto the RGB image. Both are read eagerly:
-        # np.concatenate materializes its inputs, so lazy mode cannot defer here.
-        rgb_img = np.asarray(self._get_image(self._filepaths[index]))
-        ir_img = np.asarray(self._get_image(self._infrared_path(self._filepaths[index])))
-        img = np.concatenate([rgb_img, ir_img[:1]])
+        rgb_path = self._filepaths[index]
+        ir_path = self._infrared_path(rgb_path)
+        # An empty or truncated file, as published, gives a zero-size image rather than made-up pixels (a
+        # truncated JPEG decodes only with gray fill for its missing rows). The other file of the pair cannot be
+        # returned alone, since a stacked image cannot hold half an image.
+        img = np.zeros((4, 0, 0), dtype=np.uint8)
+        sizes = [Path(rgb_path).stat().st_size, Path(ir_path).stat().st_size]  # a missing file raises here
+        if all(sizes):
+            try:
+                # Stack the paired IR channel onto the RGB image. Both are read eagerly:
+                # np.concatenate materializes its inputs, so lazy mode cannot defer here.
+                rgb_img = np.asarray(self._get_image(rgb_path))
+                ir_img = np.asarray(self._get_image(ir_path))
+                img = np.concatenate([rgb_img, ir_img[:1]])
+            except OSError as error:
+                if "image file is truncated" not in str(error):
+                    raise
         # Create the Object Detection Target
         # Cast target explicitly to ODTarget as namedtuple does not provide any typing metadata
         target = cast(
