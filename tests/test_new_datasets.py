@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import yaml
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 
 from maite_datasets.image_classification._military_aircraft import MilitaryAircraft as ICMilitaryAircraft
 from maite_datasets.image_classification._military_vehicles import MilitaryVehicles
@@ -40,6 +40,23 @@ DRONEVEHICLE_IR_ANNOTATION = """<annotation>
         </polygon>
     </object>
 </annotation>"""
+
+
+def _polygon_object(name: str, x0: int, y0: int, x1: int, y1: int) -> str:
+    return (
+        f"<object><name>{name}</name><polygon><x1>{x0}</x1><y1>{y0}</y1><x2>{x1}</x2><y2>{y0}</y2>"
+        f"<x3>{x1}</x3><y3>{y1}</y3><x4>{x0}</x4><y4>{y1}</y4></polygon></object>"
+    )
+
+
+# Every name the published train infrared labels use, in this order, each on a box of its own extent.
+DRONEVEHICLE_TRAIN_NAMES = ["car", "feright car", "feright_car", "feright", "*"]
+DRONEVEHICLE_TRAIN_IR_ANNOTATION = (
+    "<annotation><filename>ir_00001.jpg</filename>"
+    "<size><width>840</width><height>712</height><depth>1</depth></size>"
+    + "".join(_polygon_object(name, i, i, i + 10, i + 20) for i, name in enumerate(DRONEVEHICLE_TRAIN_NAMES))
+    + "</annotation>"
+)
 
 DRONEVEHICLE_RGB_ANNOTATION = """<annotation>
     <filename>rgb_00001.jpg</filename>
@@ -79,9 +96,34 @@ def dronevehicle_fake(tmp_path_factory):
         for i in range(count):
             _save_image(img_dir / f"{i:05}.jpg")
             _save_image(img_ir_dir / f"{i:05}.jpg")
-            (ir_dir / f"{i:05}.xml").write_text(DRONEVEHICLE_IR_ANNOTATION)
+            ir_annotation = DRONEVEHICLE_TRAIN_IR_ANNOTATION if split == "train" else DRONEVEHICLE_IR_ANNOTATION
+            (ir_dir / f"{i:05}.xml").write_text(ir_annotation)
             (rgb_dir / f"{i:05}.xml").write_text(DRONEVEHICLE_RGB_ANNOTATION)
     yield temp
+
+
+@pytest.fixture
+def dronevehicle_empty_files(tmp_path):
+    """A train split of 4 datums, with the published archive's two read defects.
+
+    Datum 1's RGB file and datum 2's IR file are 0 bytes, and datum 3's RGB file is a JPEG cut short, which PIL
+    reports as "image file is truncated".
+    """
+    base = tmp_path / "dronevehicle" / "train"
+    for suffix in ("img", "imgr", "label", "labelr"):
+        (base / f"train{suffix}").mkdir(parents=True)
+    for i in range(4):
+        _save_image(base / "trainimg" / f"{i:05}.jpg")
+        _save_image(base / "trainimgr" / f"{i:05}.jpg")
+        (base / "trainlabelr" / f"{i:05}.xml").write_text(DRONEVEHICLE_IR_ANNOTATION)
+        (base / "trainlabel" / f"{i:05}.xml").write_text(DRONEVEHICLE_RGB_ANNOTATION)
+    (base / "trainimg" / "00001.jpg").write_bytes(b"")
+    (base / "trainimgr" / "00002.jpg").write_bytes(b"")
+    noise = np.random.default_rng(0).integers(0, 255, (64, 64, 3), dtype=np.uint8)
+    Image.fromarray(noise).save(base / "trainimg" / "00003.jpg")
+    data = (base / "trainimg" / "00003.jpg").read_bytes()
+    (base / "trainimg" / "00003.jpg").write_bytes(data[: len(data) * 9 // 10])
+    return tmp_path
 
 
 @pytest.fixture(scope="session")
@@ -158,15 +200,89 @@ class TestDroneVehicle:
         assert len(dataset) == 3
         img, target, datum_meta = dataset[0]
         assert img.shape == (4, 10, 10)
-        # "feright car" is corrected to the "freight car" class
-        assert np.array_equal(target.labels, [4])
+        assert np.array_equal(target.labels, [0, 6, 7, 5, 4])
         # Rotated quadrilateral reduced to its axis-aligned extent
-        assert np.array_equal(target.boxes[0], [10, 20, 40, 60])
+        assert np.array_equal(target.boxes[0], [0, 0, 10, 20])
         assert datum_meta["id"] == "train_00000.jpg"
         assert datum_meta["infrared_filename"] == "ir_00001.jpg"
         assert datum_meta["rgb_filename"] == "rgb_00001.jpg"
         # IR depth plus RGB depth
         assert datum_meta["image_depth"] == 4
+        assert "dropped_points" not in datum_meta
+
+    def test_class_list_is_the_published_names_as_written(self, dronevehicle_fake):
+        published = {0: "car", 1: "truck", 2: "bus", 3: "van", 4: "*", 5: "feright", 6: "feright car", 7: "feright_car"}
+        dataset = DroneVehicle(root=dronevehicle_fake)
+        assert DroneVehicle.index2label == published
+        assert dataset.label2index == {name: index for index, name in published.items()}
+        assert dataset.metadata["index2label"] == published
+        assert dataset[0][1].scores.shape == (5, 8)
+
+    def test_each_box_carries_the_index_of_its_name_as_written(self, dronevehicle_fake):
+        dataset = DroneVehicle(root=dronevehicle_fake)
+        _, target, _ = dataset[0]
+        assert target.labels.tolist() == [dataset.label2index[name] for name in DRONEVEHICLE_TRAIN_NAMES]
+        assert target.labels.tolist() == [0, 6, 7, 5, 4]
+
+    def test_every_split_shares_one_class_list(self, dronevehicle_fake):
+        val_first = DroneVehicle(root=dronevehicle_fake, image_set="val")
+        train_after = DroneVehicle(root=dronevehicle_fake)
+        train_first = DroneVehicle(root=dronevehicle_fake)
+        val_after = DroneVehicle(root=dronevehicle_fake, image_set="val")
+        for val, train in ((val_first, train_after), (val_after, train_first)):
+            assert val.index2label == train.index2label
+            assert val.label2index == train.label2index
+            assert val[0][1].labels.tolist() == [6]
+
+    def test_unknown_name_raises_naming_the_file_and_the_name(self, dronevehicle_fake, tmp_path):
+        dataset = DroneVehicle(root=dronevehicle_fake)
+        annotation = tmp_path / "trainlabelr" / "00000.xml"
+        annotation.parent.mkdir()
+        (tmp_path / "trainlabel").mkdir()
+        (tmp_path / "trainlabel" / "00000.xml").write_text(DRONEVEHICLE_RGB_ANNOTATION)
+        annotation.write_text(DRONEVEHICLE_IR_ANNOTATION.replace("feright car", "freight car"))
+        with pytest.raises(ValueError, match="'freight car'") as error:
+            dataset._read_annotations(str(annotation))
+        assert str(annotation) in str(error.value)
+
+    @pytest.mark.filterwarnings("error")
+    @pytest.mark.parametrize("lazy", [False, True])
+    def test_empty_or_truncated_image_file_reads_as_zero_size(self, dronevehicle_empty_files, lazy):
+        dataset = DroneVehicle(root=dronevehicle_empty_files, lazy=lazy)
+        assert len(dataset) == 4
+        full_img, full_target, _ = dataset[0]
+        assert np.asarray(full_img).shape == (4, 10, 10)
+        for index in (1, 2, 3):
+            img, target, _ = dataset[index]
+            img = np.asarray(img)
+            assert img.shape == (4, 0, 0)
+            assert img.dtype == np.uint8
+            assert np.array_equal(target.boxes, full_target.boxes)
+            assert np.array_equal(target.labels, full_target.labels)
+
+    def test_empty_rgb_file_with_a_missing_ir_file_raises(self, dronevehicle_empty_files):
+        (dronevehicle_empty_files / "dronevehicle" / "train" / "trainimgr" / "00001.jpg").unlink()
+        dataset = DroneVehicle(root=dronevehicle_empty_files)
+        with pytest.raises(FileNotFoundError):
+            dataset[1]
+
+    def test_other_read_errors_still_raise(self, dronevehicle_empty_files):
+        (dronevehicle_empty_files / "dronevehicle" / "train" / "trainimg" / "00000.jpg").write_bytes(b"not a jpeg")
+        dataset = DroneVehicle(root=dronevehicle_empty_files)
+        with pytest.raises(UnidentifiedImageError):
+            dataset[0]
+
+    def test_empty_image_goes_through_the_transforms(self, dronevehicle_empty_files):
+        seen = []
+
+        def record(image):
+            seen.append(image.shape)
+            return image
+
+        dataset = DroneVehicle(root=dronevehicle_empty_files, transforms=record)
+        dataset[0]
+        dataset[1]
+        assert seen == [(4, 10, 10), (4, 0, 0)]
 
     def test_dronevehicle_base(self, dronevehicle_fake):
         dataset = DroneVehicle(root=dronevehicle_fake, image_set="base")
@@ -193,13 +309,18 @@ class TestDroneVehicle:
         assert img.shape == (4, 10, 10)
         assert datum_meta["rgb_filename"] == "rgb_00001.jpg"
 
-    def test_dronevehicle_box_forms(self, dronevehicle_fake, tmp_path):
-        """A bndbox object is read as given; a point, or a polygon whose corners coincide, is dropped and counted."""
-        dataset = DroneVehicle(root=dronevehicle_fake)
+    @staticmethod
+    def _annotation_file(tmp_path, text):
         annotation = tmp_path / "trainlabelr" / "00000.xml"
         annotation.parent.mkdir()
         (tmp_path / "trainlabel").mkdir()
         (tmp_path / "trainlabel" / "00000.xml").write_text(DRONEVEHICLE_RGB_ANNOTATION)
+        annotation.write_text(text)
+        return annotation
+
+    def test_every_annotation_is_kept(self, dronevehicle_fake, tmp_path):
+        """A bndbox is read as given, a point is a zero-area box, and a polygon whose corners coincide keeps them."""
+        dataset = DroneVehicle(root=dronevehicle_fake)
         extra = """
     <object>
         <name>car</name>
@@ -214,11 +335,27 @@ class TestDroneVehicle:
         <polygon><x1>9</x1><y1>9</y1><x2>9</x2><y2>9</y2><x3>9</x3><y3>9</y3><x4>9</x4><y4>9</y4></polygon>
     </object>
 </annotation>"""
-        annotation.write_text(DRONEVEHICLE_IR_ANNOTATION.replace("</annotation>", extra))
+        annotation = self._annotation_file(tmp_path, DRONEVEHICLE_IR_ANNOTATION.replace("</annotation>", extra))
         boxes, labels, meta = dataset._read_annotations(str(annotation))
-        assert boxes == [[10, 20, 40, 60], [5, 6, 15, 16]]
-        assert labels == [4, dataset._label2index["car"]]
-        assert meta["dropped_points"] == 2
+        assert boxes == [[10, 20, 40, 60], [5, 6, 15, 16], [7, 8, 7, 8], [9, 9, 9, 9]]
+        assert labels == [6, 0, 0, 0]
+        assert "dropped_points" not in meta
+
+    def test_point_without_a_coordinate_raises_naming_the_file(self, dronevehicle_fake, tmp_path):
+        dataset = DroneVehicle(root=dronevehicle_fake)
+        extra = "<object><name>car</name><point><x>7</x></point></object></annotation>"
+        annotation = self._annotation_file(tmp_path, DRONEVEHICLE_IR_ANNOTATION.replace("</annotation>", extra))
+        with pytest.raises(ValueError, match="point") as error:
+            dataset._read_annotations(str(annotation))
+        assert str(annotation) in str(error.value)
+
+    def test_object_with_no_geometry_raises_naming_the_file(self, dronevehicle_fake, tmp_path):
+        dataset = DroneVehicle(root=dronevehicle_fake)
+        extra = "<object><name>car</name></object></annotation>"
+        annotation = self._annotation_file(tmp_path, DRONEVEHICLE_IR_ANNOTATION.replace("</annotation>", extra))
+        with pytest.raises(ValueError) as error:
+            dataset._read_annotations(str(annotation))
+        assert str(annotation) in str(error.value)
 
 
 @pytest.mark.optional

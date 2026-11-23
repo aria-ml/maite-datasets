@@ -1,5 +1,13 @@
 # Changelog for maite-datasets
 
+## Unreleased
+
+- [fix] Read DroneVehicle as published: class names as written, every annotation, and empty or truncated images as zero-size
+  - Breaking: class 4 is now `*`, and `freight car` is gone (read as `feright car` 6 and `feright_car` 7). Datum
+    metadata no longer has `dropped_points`, and the 41 annotations with no extent come back as zero-area boxes.
+    `DroneVehicle(..., as_datamaite=True)` reuses an export written before v0.0.28, with the old indices; delete it
+    to export again.
+
 ## v0.0.27
 
 - [fix] Read DroneVehicle's axis-aligned box annotations, which came back as zero boxes, and drop annotations with no extent

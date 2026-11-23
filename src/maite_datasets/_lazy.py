@@ -22,7 +22,8 @@ TIFF_EXTENSIONS = {".tif", ".tiff"}
 
 def pil_rgb_chw_load(path: Path | str) -> NDArray[np.uint8]:
     """Open ``path`` with PIL, force RGB, return CHW uint8 array."""
-    return np.transpose(np.asarray(Image.open(path).convert("RGB"), dtype=np.uint8), (2, 0, 1))
+    with Image.open(path) as im:  # closes the file when the decode raises, too
+        return np.transpose(np.asarray(im.convert("RGB"), dtype=np.uint8), (2, 0, 1))
 
 
 def pil_rgb_chw_shape(path: Path | str) -> tuple[int, ...]:
