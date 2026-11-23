@@ -1,6 +1,6 @@
 # Changelog for maite-datasets
 
-## Unreleased
+## v0.0.28
 
 - [fix] Read DroneVehicle as published: class names as written, every annotation, and empty or truncated images as zero-size
   - Breaking: class 4 is now `*`, and `freight car` is gone (read as `feright car` 6 and `feright_car` 7). Datum
