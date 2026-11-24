@@ -115,13 +115,15 @@ existing export there is reused; otherwise a raw dataset already under `root` is
 converted in place, and only a genuinely missing dataset is downloaded (to a temporary
 directory that is discarded after conversion).
 
-Two conversion details are worth knowing. Splits are folded onto `train`/`val`/`test`,
+Three conversion details are worth knowing. Splits are folded onto `train`/`val`/`test`,
 because those are the only ones the wire formats read back: an `image_set` such as
 `operational` is exported as `train`, with a warning, and its original name survives in
 each sample's metadata, which object detection keeps and image classification cannot.
-And datasets carrying transforms export re-encoded pixels rather than
-referencing the original files, so the written images always match the written
-annotations.
+Datasets carrying transforms export re-encoded pixels rather than referencing the
+original files, so the written images always match the written annotations; a
+referenced file is written with the size in its own header. And datamaite's COCO
+writer drops a box with no width or height from an object detection export, with a
+warning for each.
 
 ## Dataset Wrappers
 
