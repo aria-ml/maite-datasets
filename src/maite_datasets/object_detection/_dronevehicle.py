@@ -59,6 +59,11 @@ class DroneVehicle(BaseODDataset[NumpyArray, NumpyObjectDetectionTarget, list[st
     infrared box at IoU 0.5 or more), but the infrared annotations label more objects, so a model that reads
     only the RGB channels is scored on some targets the RGB annotations do not have.
 
+    A datamaite export (``as_datamaite=True`` or ``to_datamaite``) copies each datum's RGB file, with the infrared
+    annotations as its boxes, and holds no infrared band. Each image is written with the size of its RGB file, so
+    a datum whose infrared file is empty or truncated is exported as its RGB image, and an empty RGB file is
+    copied with no size. datamaite's COCO writer drops the zero-area boxes, with a warning for each.
+
     Parameters
     ----------
     root : str or pathlib.Path

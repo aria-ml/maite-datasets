@@ -1,5 +1,9 @@
 # Changelog for maite-datasets
 
+## Unreleased
+
+- [fix] Write each image in a datamaite export with the size of the file it copies, not of the returned array
+
 ## v0.0.28
 
 - [fix] Read DroneVehicle as published: class names as written, every annotation, and empty or truncated images as zero-size

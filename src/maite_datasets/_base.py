@@ -96,7 +96,9 @@ class BaseDataset(Dataset[tuple[_TArray, _TTarget, DatumMetadata]]):
 
         Object detection writes COCO and image classification writes YOLO -- the one
         format each task can be written in. `dest` is replaced, not added to, so
-        re-exporting a dataset is idempotent.
+        re-exporting a dataset is idempotent. An object detection image that references
+        its file is written with that file's size, or none for an empty file, and
+        datamaite's COCO writer drops a box with no width or height, with a warning.
         """
         from maite_datasets._datamaite import export_to_datamaite
 

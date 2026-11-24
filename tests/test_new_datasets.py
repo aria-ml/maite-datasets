@@ -260,6 +260,17 @@ class TestDroneVehicle:
             assert np.array_equal(target.boxes, full_target.boxes)
             assert np.array_equal(target.labels, full_target.labels)
 
+    def test_export_sizes_describe_the_copied_rgb_files(self, dronevehicle_empty_files, tmp_path):
+        """The export copies each datum's RGB file, so it writes that file's size, also beside an empty IR file."""
+        import json
+
+        dataset = DroneVehicle(root=dronevehicle_empty_files)
+        dataset.to_datamaite(dest=tmp_path / "export")
+        coco = json.loads((tmp_path / "export" / "annotations" / "instances.json").read_text())
+        sizes = {image["file_name"]: (image.get("width"), image.get("height")) for image in coco["images"]}
+        assert sizes == {"00000.jpg": (10, 10), "00001.jpg": (None, None), "00002.jpg": (10, 10), "00003.jpg": (64, 64)}
+        assert len(coco["annotations"]) == sum(len(dataset[i][1].boxes) for i in range(4))
+
     def test_empty_rgb_file_with_a_missing_ir_file_raises(self, dronevehicle_empty_files):
         (dronevehicle_empty_files / "dronevehicle" / "train" / "trainimgr" / "00001.jpg").unlink()
         dataset = DroneVehicle(root=dronevehicle_empty_files)

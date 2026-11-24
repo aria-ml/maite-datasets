@@ -598,3 +598,45 @@ class TestExportsAreScopedToTheirImageSet:
 
         assert len(train.samples) == 100
         assert len(test.samples) == 20
+
+
+def _file_backed_od_dataset(path: Path, image: np.ndarray):
+    """One datum whose file is `path` but whose returned image is `image`, as when DroneVehicle stacks two files."""
+
+    class FileBackedODDataset:
+        metadata = {"index2label": {0: "thing"}}
+        transforms: list = []
+        lazy = False
+        _filepaths = [str(path)]
+
+        def __len__(self):
+            return 1
+
+        def __getitem__(self, index):
+            target = type("T", (), {"boxes": [[0, 0, 2, 2]], "labels": [0], "scores": None})()
+            return image, target, {"id": 0}
+
+    return FileBackedODDataset()
+
+
+class TestWrittenImageSize:
+    """The written width and height describe the file the export copies, not the array the dataset returns."""
+
+    def test_size_comes_from_the_referenced_file(self, tmp_path):
+        from maite_datasets._datamaite import _convert_od_dataset
+
+        path = tmp_path / "rgb.jpg"
+        Image.new("RGB", (6, 5)).save(path)
+        sample = _convert_od_dataset(_file_backed_od_dataset(path, np.zeros((4, 0, 0), np.uint8))).samples[0]
+        assert sample.path_or_uri == str(path)
+        assert (sample.width, sample.height) == (6, 5)
+
+    def test_an_empty_referenced_file_has_no_size(self, tmp_path):
+        from maite_datasets._datamaite import _convert_od_dataset
+
+        path = tmp_path / "rgb.jpg"
+        path.touch()
+        sample = _convert_od_dataset(_file_backed_od_dataset(path, np.zeros((4, 0, 0), np.uint8))).samples[0]
+        assert sample.path_or_uri == str(path)
+        assert (sample.width, sample.height) == (None, None)
+        assert len(sample.detections) == 1

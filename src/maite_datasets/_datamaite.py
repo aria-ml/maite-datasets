@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 
 # Splits the datamaite YOLO writers round-trip. A directory named after anything else
 # is written happily and then skipped by the loader, so every other ``image_set``
@@ -235,6 +235,23 @@ def _image_payload(
     return None, _array_to_png_bytes(np.asarray(img)), f"{index:06d}.png"
 
 
+def _written_size(path_or_uri: str | None, img: Any) -> tuple[int | None, int | None]:
+    """The (width, height) of the pixels the export holds.
+
+    A referenced file is described by its own header, not by the returned array: the two
+    can differ, as when DroneVehicle stacks an RGB file with an infrared one and returns
+    4 x 0 x 0 because the infrared file is empty, while the export copies only the RGB
+    file. An empty file has no header, so it gets no size.
+    """
+    if path_or_uri is None:
+        return int(img.shape[2]), int(img.shape[1])
+    try:
+        with Image.open(path_or_uri) as file:
+            return file.size
+    except UnidentifiedImageError:
+        return None, None
+
+
 # Sentinel for "this metadata value is not a scalar", so a legitimate None still passes.
 _NOT_SCALAR = object()
 
@@ -369,10 +386,8 @@ def _convert_od_dataset(raw_ds: Any, split: str | None = None) -> Any:
     with _prepared_for_export(raw_ds) as can_reference_source:
         for i in range(num_items):
             img, target, datum_meta = raw_ds[i]
-            h = int(img.shape[1])
-            w = int(img.shape[2])
-
             path_or_uri, image_bytes, file_name = _image_payload(raw_ds, i, img, datum_meta, can_reference_source)
+            w, h = _written_size(path_or_uri, img)
 
             detections = []
             boxes = target.boxes
