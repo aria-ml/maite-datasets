@@ -1,6 +1,6 @@
 # Changelog for maite-datasets
 
-## Unreleased
+## v0.0.29
 
 - [fix] Write each image in a datamaite export with the size of the file it copies, not of the returned array
 
